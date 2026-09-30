@@ -46,7 +46,7 @@
         } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        // Firebase configuration for kiwipam-22548
+        // Correct complete Firebase configuration for kiwipam-22548
         const defaultFirebaseConfig = {
             apiKey: "AIzaSyDwlca5C0qRP0RCUuOk1pbsFqgVP8gsyk0",
             authDomain: "kiwipam-22548.firebaseapp.com",
@@ -72,7 +72,6 @@
         const db = getFirestore(app);
         const googleProvider = new GoogleAuthProvider();
 
-        // Global references for interface handlers
         window.firebaseApp = app;
         window.firebaseAuth = auth;
         window.firebaseDb = db;

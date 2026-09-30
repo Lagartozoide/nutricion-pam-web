@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Nutrición Pam - Dra. Pamela Lagardo & Tienda Saludable</title>
+    <title>Nutrición Pam - Dra. Pamela Lagardo</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
@@ -25,19 +25,18 @@
             }
         }
     </script>
-    <!-- Google Fonts & FontAwesome Icons -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
-    <!-- Firebase SDK Modular JS Imports -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { 
             getAuth, 
             signInWithPopup, 
             GoogleAuthProvider, 
+            FacebookAuthProvider,
             createUserWithEmailAndPassword, 
             signInWithEmailAndPassword, 
             onAuthStateChanged, 
@@ -52,20 +51,17 @@
             getDocs, 
             query, 
             where, 
-            onSnapshot, 
             addDoc,
             serverTimestamp 
         } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        // Configuración oficial de Firebase
         const defaultFirebaseConfig = {
             apiKey: "AIzaSyB4c9pQf8MQMR5A8qe1SKsns5S8euESNiY",
             authDomain: "kiwipam-22548.firebaseapp.com",
             projectId: "kiwipam-22548",
             storageBucket: "kiwipam-22548.firebasestorage.app",
             messagingSenderId: "984674217063",
-            appId: "1:984674217063:web:48f05154ef4b19afdb38c2",
-            measurementId: "G-6M4HCKS665"
+            appId: "1:984674217063:web:48f05154ef4b19afdb38c2"
         };
 
         const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : defaultFirebaseConfig;
@@ -74,100 +70,91 @@
         const auth = getAuth(app);
         const db = getFirestore(app);
         const googleProvider = new GoogleAuthProvider();
+        const facebookProvider = new FacebookAuthProvider();
 
-        window.firebaseDb = db;
         window.currentUser = null;
         window.isNutri = false;
-
-        // Definir si un usuario es Nutricionista (por mail o configuración)
         const NUTRI_EMAILS = ["pamela.lagardo@gmail.com", "nutricion.pam@gmail.com"];
 
-        // Login con Google
+        // Autenticaciones
         window.loginWithGoogle = async function() {
-            try {
-                const result = await signInWithPopup(auth, googleProvider);
-                handleSuccessfulAuth(result.user);
-            } catch (error) {
-                alert("Error en autenticación: " + error.message);
-            }
+            try { await signInWithPopup(auth, googleProvider); } 
+            catch (e) { alert("Error con Google: " + e.message); }
         };
 
-        // Login con Email / Contraseña
-        window.loginWithEmail = async function(email, password) {
-            try {
-                const userCredential = await signInWithEmailAndPassword(auth, email, password);
-                handleSuccessfulAuth(userCredential.user);
-            } catch (error) {
-                alert("Error al ingresar: " + error.message);
-            }
+        window.loginWithFacebook = async function() {
+            try { await signInWithPopup(auth, facebookProvider); } 
+            catch (e) { alert("Error con Facebook: " + e.message); }
         };
 
-        // Registro con Email
-        window.registerWithEmail = async function(email, password, name) {
+        window.loginManual = async function() {
+            const email = document.getElementById('auth-email').value;
+            const pass = document.getElementById('auth-pass').value;
+            if(!email || !pass) return alert("Por favor completá email y contraseña.");
+            try { await signInWithEmailAndPassword(auth, email, pass); } 
+            catch (e) { alert("Error al ingresar: " + e.message); }
+        };
+
+        window.registerManual = async function() {
+            const name = document.getElementById('auth-name').value;
+            const email = document.getElementById('auth-email').value;
+            const pass = document.getElementById('auth-pass').value;
+            if(!name || !email || !pass) return alert("Por favor completá nombre, email y contraseña.");
             try {
-                const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-                const user = userCredential.user;
-                // Guardar datos iniciales en Firestore
-                await setDoc(doc(db, "users", user.uid), {
-                    displayName: name,
-                    email: email,
-                    role: "paciente",
-                    status: "activo",
-                    createdAt: serverTimestamp()
+                const res = await createUserWithEmailAndPassword(auth, email, pass);
+                await setDoc(doc(db, "users", res.user.uid), {
+                    displayName: name, email: email, role: "paciente", createdAt: serverTimestamp()
                 });
-                handleSuccessfulAuth(user, name);
-            } catch (error) {
-                alert("Error al registrar: " + error.message);
-            }
+            } catch (e) { alert("Error al registrarte: " + e.message); }
         };
 
-        // Observador de Estado
         onAuthStateChanged(auth, async (user) => {
             if (user) {
                 window.currentUser = user;
                 window.isNutri = NUTRI_EMAILS.includes(user.email.toLowerCase());
-                handleSuccessfulAuth(user);
+                renderLoggedInUI(user);
             } else {
-                document.getElementById('app-container').classList.add('hidden');
-                document.getElementById('app-header').classList.add('hidden');
-                document.getElementById('login-gate').classList.remove('hidden');
+                window.currentUser = null;
+                renderLoggedOutUI();
             }
         });
 
-        async function handleSuccessfulAuth(user, customName = null) {
-            const name = customName || user.displayName || user.email.split('@')[0];
-            document.getElementById('login-gate').classList.add('hidden');
-            document.getElementById('app-header').classList.remove('hidden');
-            document.getElementById('app-container').classList.remove('hidden');
-            
-            document.getElementById('welcome-user-name').innerText = name.split(' ')[0];
+        function renderLoggedInUI(user) {
+            const name = user.displayName || user.email.split('@')[0];
+            document.getElementById('auth-badge').classList.remove('hidden');
+            document.getElementById('btn-open-login').classList.add('hidden');
             document.getElementById('user-display-name').innerText = name;
             
-            const initials = name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
-            document.getElementById('user-avatar-initials').innerText = initials || 'NC';
+            // Hero Panel Logueado
+            document.getElementById('hero-guest').classList.add('hidden');
+            document.getElementById('hero-user').classList.remove('hidden');
+            document.getElementById('welcome-user-name').innerText = name.split(' ')[0];
 
-            // Mostrar u ocultar pestaña de Nutricionista
             if (window.isNutri) {
                 document.getElementById('nav-nutri-panel').classList.remove('hidden');
-                document.getElementById('user-role-tag').innerText = "Nutricionista Principal";
+                document.getElementById('user-role-tag').innerText = "Nutricionista";
             } else {
                 document.getElementById('nav-nutri-panel').classList.add('hidden');
                 document.getElementById('user-role-tag').innerText = "Paciente Activo";
             }
 
-            // Inicializar fecha por defecto en turnos
-            const today = new Date().toISOString().split('T')[0];
-            document.getElementById('turno-fecha').value = today;
-            window.cargarHorariosDisponibles(today);
             window.cargarFichaMedicaPaciente(user.uid);
             if (window.isNutri) window.cargarListaPacientesNutri();
         }
 
-        window.logoutUser = async function() {
-            await signOut(auth);
-        };
+        function renderLoggedOutUI() {
+            document.getElementById('auth-badge').classList.add('hidden');
+            document.getElementById('btn-open-login').classList.remove('hidden');
+            document.getElementById('nav-nutri-panel').classList.add('hidden');
+            
+            // Hero Panel Invitado
+            document.getElementById('hero-user').classList.add('hidden');
+            document.getElementById('hero-guest').classList.remove('hidden');
+        }
 
-        // --- LÓGICA DE TURNOS EN FIRESTORE ---
+        window.logoutUser = async function() { await signOut(auth); };
+
+        // --- CÓDIGO DE HORARIOS CORREGIDO ---
         window.selectedModalidad = "Presencial (Posadas)";
         window.selectedHora = null;
 
@@ -195,44 +182,44 @@
         };
 
         window.cargarHorariosDisponibles = async function(fecha) {
-            const horasValidas = ["09:00 hs", "10:30 hs", "14:00 hs", "16:30 hs", "18:00 hs", "19:15 hs"];
             const container = document.getElementById('horarios-container');
-            container.innerHTML = `<div class="col-span-3 text-center py-4 text-xs font-bold text-gray-500"><i class="fa-solid fa-spinner animate-spin"></i> Consultando agenda...</div>`;
+            const horasBase = ["09:00 hs", "10:30 hs", "14:00 hs", "16:30 hs", "18:00 hs", "19:15 hs"];
+            let turnosOcupados = [];
 
             try {
-                // Consultar en Firestore turnos ya tomados en esa fecha
                 const q = query(collection(db, "turnos"), where("fecha", "==", fecha));
                 const querySnapshot = await getDocs(q);
-                const turnosOcupados = querySnapshot.docs.map(doc => doc.data().hora);
-
-                container.innerHTML = "";
-                horasValidas.forEach(hora => {
-                    const estaOcupado = turnosOcupados.includes(hora);
-                    const btn = document.createElement('button');
-                    
-                    if (estaOcupado) {
-                        btn.className = "hora-btn py-3 border border-red-200 bg-red-50 text-red-500 rounded-xl text-xs font-bold cursor-not-allowed flex items-center justify-center space-x-1";
-                        btn.disabled = true;
-                        btn.innerHTML = `<i class="fa-solid fa-xmark"></i> <span>${hora} (Ocupado)</span>`;
-                    } else {
-                        btn.className = "hora-btn py-3 border border-gray-300 hover:border-brand-700 hover:bg-brand-50 rounded-xl text-xs font-bold text-gray-800 transition";
-                        btn.onclick = () => window.selectHora(btn, hora);
-                        btn.innerText = hora;
-                    }
-                    container.appendChild(btn);
-                });
+                turnosOcupados = querySnapshot.docs.map(doc => doc.data().hora);
             } catch(e) {
-                console.error("Error al obtener horarios:", e);
-                container.innerHTML = `<p class="col-span-3 text-xs text-red-500">Error al cargar disponibilidad.</p>`;
+                console.warn("Sin respuesta de Firestore o primera carga, generando mapa por defecto:", e);
             }
+
+            container.innerHTML = "";
+            horasBase.forEach(hora => {
+                const estaOcupado = turnosOcupados.includes(hora);
+                const btn = document.createElement('button');
+                
+                if (estaOcupado) {
+                    btn.className = "hora-btn p-3 border border-red-200 bg-red-50 text-red-500 rounded-xl text-xs font-bold cursor-not-allowed flex items-center justify-center space-x-1";
+                    btn.disabled = true;
+                    btn.innerHTML = `<i class="fa-solid fa-xmark"></i> <span>${hora}</span>`;
+                } else {
+                    btn.className = "hora-btn p-3 border border-gray-300 hover:border-brand-700 hover:bg-brand-50 rounded-xl text-xs font-bold text-gray-800 transition";
+                    btn.onclick = () => window.selectHora(btn, hora);
+                    btn.innerText = hora;
+                }
+                container.appendChild(btn);
+            });
         };
 
         window.confirmarReserva = async function() {
-            const fecha = document.getElementById('turno-fecha').value;
-            if (!fecha || !window.selectedHora) {
-                alert("Por favor elegí la fecha y el horario disponible.");
+            if (!window.currentUser) {
+                alert("Debés iniciar sesión para confirmar tu reserva.");
+                window.openModalAuth();
                 return;
             }
+            const fecha = document.getElementById('turno-fecha').value;
+            if (!fecha || !window.selectedHora) return alert("Seleccioná fecha y horario disponible.");
 
             try {
                 await addDoc(collection(db, "turnos"), {
@@ -243,33 +230,29 @@
                     hora: window.selectedHora,
                     createdAt: serverTimestamp()
                 });
-                alert(`¡Turno reservado con éxito para el ${fecha} a las ${window.selectedHora}!`);
-                window.selectedHora = null;
+                alert(`¡Turno agendado con éxito para el ${fecha} a las ${window.selectedHora}!`);
                 window.cargarHorariosDisponibles(fecha);
             } catch(e) {
-                alert("Error al registrar el turno: " + e.message);
+                alert("Error al reservar: " + e.message);
             }
         };
 
-        // --- LÓGICA DE FICHA MÉDICA ---
         window.cargarFichaMedicaPaciente = async function(userId) {
-            const docRef = doc(db, "fichas_medicas", userId);
-            const docSnap = await getDoc(docRef);
-            if (docSnap.exists()) {
-                const data = docSnap.data();
-                document.getElementById('ficha-peso').innerText = (data.peso || '--') + ' kg';
-                document.getElementById('ficha-altura').innerText = (data.altura || '--') + ' cm';
-                document.getElementById('ficha-grasa').innerText = (data.grasa || '--') + ' %';
-                document.getElementById('ficha-musculo').innerText = (data.musculo || '--') + ' %';
-                document.getElementById('ficha-obs').innerText = data.observaciones || 'Sin observaciones registradas por la nutricionista.';
-            }
+            try {
+                const docSnap = await getDoc(doc(db, "fichas_medicas", userId));
+                if (docSnap.exists()) {
+                    const data = docSnap.data();
+                    document.getElementById('ficha-peso').innerText = (data.peso || '--') + ' kg';
+                    document.getElementById('ficha-altura').innerText = (data.altura || '--') + ' cm';
+                    document.getElementById('ficha-grasa').innerText = (data.grasa || '--') + ' %';
+                    document.getElementById('ficha-musculo').innerText = (data.musculo || '--') + ' %';
+                    document.getElementById('ficha-obs').innerText = data.observaciones || 'Sin observaciones registradas aún.';
+                }
+            } catch(e) { console.error(e); }
         };
 
-        // --- LÓGICA NUTRICIONISTA: GESTIÓN DE PACIENTES ---
         window.cargarListaPacientesNutri = async function() {
             const listContainer = document.getElementById('nutri-pacientes-list');
-            listContainer.innerHTML = `<p class="text-xs text-gray-500">Cargando nómina de pacientes...</p>`;
-
             try {
                 const querySnapshot = await getDocs(collection(db, "users"));
                 let html = "";
@@ -283,9 +266,8 @@
                                     <h4 class="font-bold text-gray-900 text-sm">${p.displayName || 'Paciente sin nombre'}</h4>
                                     <span class="text-xs text-gray-500">${p.email}</span>
                                 </div>
-                                <span class="text-xs px-2.5 py-1 bg-emerald-100 text-emerald-800 font-extrabold rounded-full">${p.status || 'Activo'}</span>
+                                <span class="text-xs px-2.5 py-1 bg-emerald-100 text-emerald-800 font-extrabold rounded-full">Activo</span>
                             </div>
-                            
                             <div id="det-${pId}" class="hidden pt-3 border-t border-gray-200 space-y-3 text-xs">
                                 <p class="font-bold text-brand-800">Actualizar Antropometría:</p>
                                 <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
@@ -294,18 +276,13 @@
                                     <input type="number" id="inp-gra-${pId}" placeholder="% Grasa" class="p-2 border border-gray-300 rounded-lg">
                                     <input type="number" id="inp-mus-${pId}" placeholder="% Músculo" class="p-2 border border-gray-300 rounded-lg">
                                 </div>
-                                <textarea id="inp-obs-${pId}" placeholder="Observaciones y plan médico..." class="w-full p-2 border border-gray-300 rounded-lg"></textarea>
-                                <button onclick="window.guardarFichaPacienteNutri('${pId}')" class="bg-brand-700 text-white font-bold px-4 py-2 rounded-xl hover:bg-brand-800">
-                                    Guardar Ficha
-                                </button>
+                                <textarea id="inp-obs-${pId}" placeholder="Observaciones médicas..." class="w-full p-2 border border-gray-300 rounded-lg"></textarea>
+                                <button onclick="window.guardarFichaPacienteNutri('${pId}')" class="bg-brand-700 text-white font-bold px-4 py-2 rounded-xl">Guardar Ficha</button>
                             </div>
-                        </div>
-                    `;
+                        </div>`;
                 });
-                listContainer.innerHTML = html || "<p class='text-xs text-gray-500'>No hay pacientes registrados aún.</p>";
-            } catch(e) {
-                console.error("Error al cargar pacientes:", e);
-            }
+                listContainer.innerHTML = html || "<p class='text-xs text-gray-500'>No hay pacientes registrados.</p>";
+            } catch(e) { console.error(e); }
         };
 
         window.guardarFichaPacienteNutri = async function(pacienteId) {
@@ -319,23 +296,31 @@
                 await setDoc(doc(db, "fichas_medicas", pacienteId), {
                     peso, altura, grasa, musculo, observaciones: obs, updatedAt: serverTimestamp()
                 }, { merge: true });
-                alert("¡Ficha antropométrica guardada con éxito!");
-            } catch(e) {
-                alert("Error al guardar ficha: " + e.message);
-            }
+                alert("¡Ficha antropométrica actualizada!");
+            } catch(e) { alert("Error: " + e.message); }
         };
+
+        // Inicialización de Fecha al cargar la página
+        window.addEventListener('DOMContentLoaded', () => {
+            const today = new Date().toISOString().split('T')[0];
+            const dateInput = document.getElementById('turno-fecha');
+            if(dateInput) {
+                dateInput.value = today;
+                window.cargarHorariosDisponibles(today);
+            }
+        });
     </script>
 
     <style>
         body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #faf9f5; color: #1a251b; }
-        .tab-content { display: none; opacity: 0; transition: opacity 0.2s ease-in-out; }
-        .tab-content.active { display: block; opacity: 1; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
     </style>
 </head>
 <body class="min-h-screen flex flex-col justify-between antialiased">
 
-    <!-- Header -->
-    <header id="app-header" class="hidden bg-white border-b border-gray-200 sticky top-0 z-30 shadow-sm">
+    <!-- Navbar -->
+    <header class="bg-white border-b border-gray-200 sticky top-0 z-30 shadow-sm">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div class="flex justify-between h-20 items-center">
                 
@@ -348,39 +333,41 @@
                 </div>
 
                 <nav class="hidden lg:flex items-center space-x-1 bg-gray-100/80 p-1.5 rounded-2xl border border-gray-200">
-                    <button onclick="switchMainTab('dashboard')" data-tab="dashboard" class="nav-btn active px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition flex items-center space-x-1.5 bg-white text-brand-800 shadow-sm">
-                        <i class="fa-solid fa-house"></i><span>Mi Panel</span>
+                    <button onclick="switchMainTab('dashboard')" data-tab="dashboard" class="nav-btn active px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition bg-white text-brand-800 shadow-sm">
+                        <i class="fa-solid fa-house"></i><span>Inicio</span>
                     </button>
-                    <button onclick="switchMainTab('turnos')" data-tab="turnos" class="nav-btn px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition flex items-center space-x-1.5 text-gray-600 hover:text-brand-800">
+                    <button onclick="switchMainTab('turnos')" data-tab="turnos" class="nav-btn px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition text-gray-600 hover:text-brand-800">
                         <i class="fa-solid fa-calendar-plus"></i><span>Agendar Turno</span>
                     </button>
-                    <button onclick="switchMainTab('tienda')" data-tab="tienda" class="nav-btn px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition flex items-center space-x-1.5 text-gray-600 hover:text-brand-800">
+                    <button onclick="switchMainTab('tienda')" data-tab="tienda" class="nav-btn px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition text-gray-600 hover:text-brand-800">
                         <i class="fa-solid fa-store"></i><span>Tienda Saludable</span>
                     </button>
-                    <button onclick="switchMainTab('plan')" data-tab="plan" class="nav-btn px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition flex items-center space-x-1.5 text-gray-600 hover:text-brand-800">
+                    <button onclick="switchMainTab('plan')" data-tab="plan" class="nav-btn px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition text-gray-600 hover:text-brand-800">
                         <i class="fa-solid fa-utensils"></i><span>Mi Plan</span>
                     </button>
-                    <button onclick="switchMainTab('ficha')" data-tab="ficha" class="nav-btn px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition flex items-center space-x-1.5 text-gray-600 hover:text-brand-800">
+                    <button onclick="switchMainTab('ficha')" data-tab="ficha" class="nav-btn px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition text-gray-600 hover:text-brand-800">
                         <i class="fa-solid fa-clipboard-user"></i><span>Ficha Médica</span>
                     </button>
-                    <button id="nav-nutri-panel" onclick="switchMainTab('nutri')" data-tab="nutri" class="hidden nav-btn px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition flex items-center space-x-1.5 text-purple-700 bg-purple-50 hover:bg-purple-100">
-                        <i class="fa-solid fa-user-doctor"></i><span>Gestión Nutricionista</span>
+                    <button id="nav-nutri-panel" onclick="switchMainTab('nutri')" data-tab="nutri" class="hidden nav-btn px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition text-purple-700 bg-purple-50 hover:bg-purple-100">
+                        <i class="fa-solid fa-user-doctor"></i><span>Panel Nutricionista</span>
                     </button>
                 </nav>
 
                 <div class="flex items-center space-x-3">
-                    <div class="hidden sm:flex items-center space-x-3 bg-brand-50 border border-brand-100 p-1.5 pr-4 rounded-full">
-                        <div class="w-9 h-9 rounded-full bg-brand-700 text-white flex items-center justify-center font-bold text-sm">
-                            <span id="user-avatar-initials">NC</span>
-                        </div>
+                    <button id="btn-open-login" onclick="openModalAuth()" class="bg-brand-700 hover:bg-brand-800 text-white font-extrabold px-5 py-2.5 rounded-2xl text-xs transition shadow">
+                        <i class="fa-solid fa-user"></i> <span>Ingresar / Registrarse</span>
+                    </button>
+
+                    <div id="auth-badge" class="hidden flex items-center space-x-3 bg-brand-50 border border-brand-100 p-1.5 pr-4 rounded-full">
+                        <div class="w-9 h-9 rounded-full bg-brand-700 text-white flex items-center justify-center font-bold text-sm">PL</div>
                         <div class="text-left">
                             <span id="user-display-name" class="block text-xs font-extrabold text-gray-900 leading-none">Usuario</span>
                             <span id="user-role-tag" class="text-[11px] text-brand-700 font-semibold">Paciente</span>
                         </div>
+                        <button onclick="logoutUser()" class="p-1 text-gray-400 hover:text-red-600 ml-2">
+                            <i class="fa-solid fa-right-from-bracket"></i>
+                        </button>
                     </div>
-                    <button onclick="logoutUser()" class="p-2.5 rounded-xl text-gray-500 hover:text-red-600 hover:bg-red-50 transition">
-                        <i class="fa-solid fa-right-from-bracket text-lg"></i>
-                    </button>
                 </div>
             </div>
         </div>
@@ -388,134 +375,196 @@
 
     <main class="flex-grow max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
         
-        <!-- LOGIN GATE -->
-        <section id="login-gate" class="min-h-[75vh] flex items-center justify-center py-6">
-            <div class="bg-white border border-gray-200 rounded-3xl shadow-xl p-8 max-w-md w-full space-y-6">
-                <div class="text-center space-y-2">
-                    <div class="w-16 h-16 bg-brand-100 text-brand-800 rounded-2xl flex items-center justify-center text-3xl mx-auto">🌱</div>
-                    <h1 class="text-2xl font-extrabold text-gray-900">Bienvenido/a</h1>
-                    <p class="text-xs font-semibold text-brand-700">Dra. Pamela Lagardo • Nutrición Integral</p>
+        <!-- PESTAÑA: PANEL PRINCIPAL (INICIO) -->
+        <section id="tab-dashboard" class="tab-content active space-y-8">
+            
+            <!-- VISTA INVITADO (OFFLINE / SIN SESIÓN) -->
+            <div id="hero-guest" class="bg-gradient-to-r from-brand-800 to-brand-900 rounded-3xl p-8 sm:p-12 text-white shadow-lg space-y-6">
+                <div class="max-w-2xl space-y-3">
+                    <span class="bg-brand-700 text-brand-100 text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider">Consultorio Abierto • Posadas, Misiones</span>
+                    <h1 class="text-3xl sm:text-5xl font-black leading-tight">¡Iniciá sesión y pedí un turno ya mismo!</h1>
+                    <p class="text-brand-100 text-sm sm:text-base">Especialista en nutrición deportiva, clínica e integral. Agendá tu consulta presencial u online en simples pasos.</p>
                 </div>
-                <button onclick="loginWithGoogle()" class="w-full bg-white hover:bg-gray-50 text-gray-700 font-bold py-3 px-4 border border-gray-300 rounded-2xl flex items-center justify-center space-x-3 transition">
-                    <i class="fa-brands fa-google text-red-500"></i><span class="text-sm">Continuar con Google</span>
-                </button>
+                <div class="flex flex-wrap gap-3">
+                    <button onclick="switchMainTab('turnos')" class="bg-white text-brand-900 font-extrabold px-6 py-3.5 rounded-2xl text-sm hover:bg-brand-50 transition shadow">
+                        <i class="fa-solid fa-calendar-check text-brand-700"></i> Agendar Turno Nutricional
+                    </button>
+                    <button onclick="openModalAuth()" class="bg-brand-700 text-white font-extrabold px-6 py-3.5 rounded-2xl text-sm hover:bg-brand-600 transition border border-brand-600">
+                        Crear Cuenta / Ingresar
+                    </button>
+                </div>
+            </div>
+
+            <!-- VISTA USUARIO LOGUEADO -->
+            <div id="hero-user" class="hidden bg-gradient-to-r from-brand-800 to-brand-900 rounded-3xl p-8 text-white shadow-lg space-y-3">
+                <h1 class="text-3xl font-extrabold">¡Hola, <span id="welcome-user-name">Paciente</span>! 👋</h1>
+                <p class="text-brand-100 text-sm">Bienvenido a tu portal de nutrición y salud personalizada.</p>
+            </div>
+
+            <!-- SECCIÓN DE SERVICIOS Y TIENDA EN EL INICIO -->
+            <div class="space-y-4">
+                <h3 class="text-xl font-extrabold text-gray-900">Servicios & Programas Disponibles</h3>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div class="bg-white border border-gray-200 rounded-3xl p-6 shadow-sm space-y-3">
+                        <div class="w-12 h-12 bg-emerald-100 text-emerald-800 rounded-2xl flex items-center justify-center text-xl font-bold">🩺</div>
+                        <h4 class="font-extrabold text-gray-900">Consulta Nutricional Presencial</h4>
+                        <p class="text-xs text-gray-600">Evaluación antropométrica completa, bioimpedancia y plan alimentario adaptado a tus metas en Posadas.</p>
+                        <button onclick="switchMainTab('turnos')" class="text-xs font-bold text-brand-700 hover:underline">Solicitar Turno &rarr;</button>
+                    </div>
+                    <div class="bg-white border border-gray-200 rounded-3xl p-6 shadow-sm space-y-3">
+                        <div class="w-12 h-12 bg-blue-100 text-blue-800 rounded-2xl flex items-center justify-center text-xl font-bold">💻</div>
+                        <h4 class="font-extrabold text-gray-900">Atención Online</h4>
+                        <p class="text-xs text-gray-600">Videoconsulta personalizada con seguimiento semanal directo vía WhatsApp desde cualquier lugar.</p>
+                        <button onclick="switchMainTab('turnos')" class="text-xs font-bold text-brand-700 hover:underline">Solicitar Turno &rarr;</button>
+                    </div>
+                    <div class="bg-white border border-gray-200 rounded-3xl p-6 shadow-sm space-y-3">
+                        <div class="w-12 h-12 bg-amber-100 text-amber-800 rounded-2xl flex items-center justify-center text-xl font-bold">📚</div>
+                        <h4 class="font-extrabold text-gray-900">Tienda & Material Digital</h4>
+                        <p class="text-xs text-gray-600">Adquirí recetarios saludables, ebooks exclusivos de cocina y productos recomendados.</p>
+                        <button onclick="switchMainTab('tienda')" class="text-xs font-bold text-brand-700 hover:underline">Ver Tienda &rarr;</button>
+                    </div>
+                </div>
             </div>
         </section>
 
-        <div id="app-container" class="hidden">
-            
-            <!-- PESTAÑA: PANEL PRINCIPAL -->
-            <section id="tab-dashboard" class="tab-content active space-y-8">
-                <div class="bg-gradient-to-r from-brand-800 to-brand-900 rounded-3xl p-6 sm:p-8 text-white shadow-lg">
-                    <h1 class="text-3xl font-extrabold">¡Hola, <span id="welcome-user-name">Paciente</span>!</h1>
-                    <p class="mt-2 text-brand-100 text-sm">Bienvenido a tu portal de nutrición y bienestar.</p>
-                </div>
-            </section>
-
-            <!-- PESTAÑA: AGENDAR TURNO (DINÁMICO CON FIRESTORE) -->
-            <section id="tab-turnos" class="tab-content space-y-6">
-                <div class="bg-white border border-gray-200 rounded-3xl p-6 sm:p-8 shadow-sm">
-                    <h2 class="text-2xl font-extrabold text-gray-900 mb-2">Agendá tu Turno Nutricional</h2>
-                    <p class="text-sm text-gray-600 mb-6">Los horarios ocupados por otros pacientes se muestran automáticamente deshabilitados en rojo.</p>
-                    
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div class="space-y-4">
-                            <div>
-                                <label class="block text-xs font-bold text-gray-700 uppercase mb-2">1. Modalidad</label>
-                                <div class="grid grid-cols-2 gap-3">
-                                    <button onclick="window.selectModalidad(this, 'Presencial (Posadas)')" class="mod-btn border-2 border-brand-700 bg-brand-50 p-4 rounded-2xl text-left font-bold text-brand-900 text-sm">
-                                        <i class="fa-solid fa-user-doctor text-brand-700 block text-lg mb-1"></i>
-                                        Presencial (Posadas)
-                                    </button>
-                                    <button onclick="window.selectModalidad(this, 'Online (Video)')" class="mod-btn border-2 border-gray-200 p-4 rounded-2xl text-left font-bold text-gray-700 text-sm">
-                                        <i class="fa-solid fa-laptop text-gray-500 block text-lg mb-1"></i>
-                                        Online (Video)
-                                    </button>
-                                </div>
-                            </div>
-                            <div>
-                                <label class="block text-xs font-bold text-gray-700 uppercase mb-2">2. Seleccionar Fecha</label>
-                                <input type="date" id="turno-fecha" onchange="window.cargarHorariosDisponibles(this.value)" class="w-full p-3.5 rounded-2xl border border-gray-300 bg-sand text-sm font-semibold text-gray-800">
+        <!-- PESTAÑA: AGENDAR TURNO -->
+        <section id="tab-turnos" class="tab-content space-y-6">
+            <div class="bg-white border border-gray-200 rounded-3xl p-6 sm:p-8 shadow-sm">
+                <h2 class="text-2xl font-extrabold text-gray-900 mb-1">Agendá tu Turno Nutricional</h2>
+                <p class="text-xs text-gray-600 mb-6">Seleccioná la modalidad y la fecha. Los horarios marcados con una X roja ya no tienen disponibilidad.</p>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-xs font-bold text-gray-700 uppercase mb-2">1. Modalidad</label>
+                            <div class="grid grid-cols-2 gap-3">
+                                <button onclick="window.selectModalidad(this, 'Presencial (Posadas)')" class="mod-btn border-2 border-brand-700 bg-brand-50 p-4 rounded-2xl text-left font-bold text-brand-900 text-sm">
+                                    <i class="fa-solid fa-user-doctor text-brand-700 block text-lg mb-1"></i> Presencial (Posadas)
+                                </button>
+                                <button onclick="window.selectModalidad(this, 'Online (Video)')" class="mod-btn border-2 border-gray-200 p-4 rounded-2xl text-left font-bold text-gray-700 text-sm">
+                                    <i class="fa-solid fa-laptop text-gray-500 block text-lg mb-1"></i> Online (Video)
+                                </button>
                             </div>
                         </div>
-
-                        <div class="space-y-4">
-                            <label class="block text-xs font-bold text-gray-700 uppercase">3. Horarios Disponibles</label>
-                            <div id="horarios-container" class="grid grid-cols-3 gap-2">
-                                <!-- Se llena dinámicamente -->
-                            </div>
-                            <button onclick="window.confirmarReserva()" class="w-full mt-4 bg-brand-700 hover:bg-brand-800 text-white font-extrabold py-3.5 px-4 rounded-2xl transition text-sm shadow">
-                                Confirmar y Reservar Turno
-                            </button>
+                        <div>
+                            <label class="block text-xs font-bold text-gray-700 uppercase mb-2">2. Seleccionar Fecha</label>
+                            <input type="date" id="turno-fecha" onchange="window.cargarHorariosDisponibles(this.value)" class="w-full p-3.5 rounded-2xl border border-gray-300 bg-sand text-sm font-semibold text-gray-800">
                         </div>
+                    </div>
+
+                    <div class="space-y-4">
+                        <label class="block text-xs font-bold text-gray-700 uppercase">3. Horarios Disponibles</label>
+                        <div id="horarios-container" class="grid grid-cols-3 gap-2"></div>
+                        <button onclick="window.confirmarReserva()" class="w-full mt-4 bg-brand-700 hover:bg-brand-800 text-white font-extrabold py-3.5 px-4 rounded-2xl transition text-sm shadow">
+                            Confirmar y Reservar Turno
+                        </button>
                     </div>
                 </div>
-            </section>
+            </div>
+        </section>
 
-            <!-- PESTAÑA: TIENDA SALUDABLE -->
-            <section id="tab-tienda" class="tab-content space-y-6">
-                <h2 class="text-2xl font-extrabold text-gray-900">Tienda Saludable & Materiales</h2>
-                <div class="grid grid-cols-1 sm:grid-cols-3 gap-6">
-                    <div class="bg-white border border-gray-200 rounded-3xl p-5 shadow-sm space-y-2">
-                        <div class="h-32 bg-sand rounded-2xl flex items-center justify-center text-4xl">📚</div>
-                        <h3 class="font-extrabold text-gray-900">Recetario Digital Antiinflamatorio</h3>
-                        <p class="text-xs text-gray-500">Más de 40 recetas prácticas explicadas paso a paso.</p>
-                        <span class="font-black text-brand-800 block pt-2">$3.500</span>
+        <!-- PESTAÑA: TIENDA -->
+        <section id="tab-tienda" class="tab-content space-y-6">
+            <h2 class="text-2xl font-extrabold text-gray-900">Tienda Saludable & Ebooks</h2>
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-6">
+                <div class="bg-white border border-gray-200 rounded-3xl p-5 shadow-sm space-y-2">
+                    <div class="h-32 bg-sand rounded-2xl flex items-center justify-center text-4xl">📚</div>
+                    <h3 class="font-extrabold text-gray-900">Recetario Digital Antiinflamatorio</h3>
+                    <p class="text-xs text-gray-500">Más de 40 recetas prácticas explicadas paso a paso.</p>
+                    <span class="font-black text-brand-800 block pt-2">$3.500</span>
+                </div>
+                <div class="bg-white border border-gray-200 rounded-3xl p-5 shadow-sm space-y-2">
+                    <div class="h-32 bg-sand rounded-2xl flex items-center justify-center text-4xl">🧉</div>
+                    <h3 class="font-extrabold text-gray-900">Yerba Mate Orgánica YASY</h3>
+                    <p class="text-xs text-gray-500">Yerba mate especial seleccionada, sin polvillo, origen Misiones.</p>
+                    <span class="font-black text-brand-800 block pt-2">$4.500</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- PESTAÑA: FICHA MÉDICA PACIENTE -->
+        <section id="tab-ficha" class="tab-content space-y-6">
+            <div class="bg-white border border-gray-200 rounded-3xl p-6 shadow-sm space-y-4">
+                <h2 class="text-2xl font-extrabold text-gray-900">Mi Ficha Médica & Antropometría</h2>
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                    <div class="p-4 bg-sand rounded-2xl text-center">
+                        <span class="block text-xs font-bold text-gray-500">Peso</span>
+                        <span id="ficha-peso" class="text-xl font-extrabold text-gray-900">-- kg</span>
                     </div>
-                    <div class="bg-white border border-gray-200 rounded-3xl p-5 shadow-sm space-y-2">
-                        <div class="h-32 bg-sand rounded-2xl flex items-center justify-center text-4xl">🧉</div>
-                        <h3 class="font-extrabold text-gray-900">Yerba Mate Orgánica YASY</h3>
-                        <p class="text-xs text-gray-500">Yerba mate especial seleccionada, sin polvillo, origen Misiones.</p>
-                        <span class="font-black text-brand-800 block pt-2">$4.500</span>
+                    <div class="p-4 bg-sand rounded-2xl text-center">
+                        <span class="block text-xs font-bold text-gray-500">Altura</span>
+                        <span id="ficha-altura" class="text-xl font-extrabold text-gray-900">-- cm</span>
+                    </div>
+                    <div class="p-4 bg-sand rounded-2xl text-center">
+                        <span class="block text-xs font-bold text-gray-500">% Grasa</span>
+                        <span id="ficha-grasa" class="text-xl font-extrabold text-gray-900">-- %</span>
+                    </div>
+                    <div class="p-4 bg-sand rounded-2xl text-center">
+                        <span class="block text-xs font-bold text-gray-500">% Músculo</span>
+                        <span id="ficha-musculo" class="text-xl font-extrabold text-gray-900">-- %</span>
                     </div>
                 </div>
-            </section>
-
-            <!-- PESTAÑA: FICHA MÉDICA PACIENTE -->
-            <section id="tab-ficha" class="tab-content space-y-6">
-                <div class="bg-white border border-gray-200 rounded-3xl p-6 shadow-sm space-y-4">
-                    <h2 class="text-2xl font-extrabold text-gray-900">Mi Ficha Médica & Antropometría</h2>
-                    <p class="text-xs text-gray-600">Información antropométrica cargada por la Dra. Pamela Lagardo.</p>
-                    
-                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                        <div class="p-4 bg-sand rounded-2xl text-center">
-                            <span class="block text-xs font-bold text-gray-500">Peso</span>
-                            <span id="ficha-peso" class="text-xl font-extrabold text-gray-900">-- kg</span>
-                        </div>
-                        <div class="p-4 bg-sand rounded-2xl text-center">
-                            <span class="block text-xs font-bold text-gray-500">Altura</span>
-                            <span id="ficha-altura" class="text-xl font-extrabold text-gray-900">-- cm</span>
-                        </div>
-                        <div class="p-4 bg-sand rounded-2xl text-center">
-                            <span class="block text-xs font-bold text-gray-500">% Grasa</span>
-                            <span id="ficha-grasa" class="text-xl font-extrabold text-gray-900">-- %</span>
-                        </div>
-                        <div class="p-4 bg-sand rounded-2xl text-center">
-                            <span class="block text-xs font-bold text-gray-500">% Músculo</span>
-                            <span id="ficha-musculo" class="text-xl font-extrabold text-gray-900">-- %</span>
-                        </div>
-                    </div>
-                    <div class="p-4 bg-brand-50 border border-brand-100 rounded-2xl">
-                        <h4 class="font-bold text-brand-800 text-xs uppercase mb-1">Observaciones Nutricionales:</h4>
-                        <p id="ficha-obs" class="text-xs text-gray-700">Sin observaciones registradas por el momento.</p>
-                    </div>
+                <div class="p-4 bg-brand-50 border border-brand-100 rounded-2xl">
+                    <h4 class="font-bold text-brand-800 text-xs uppercase mb-1">Observaciones Nutricionales:</h4>
+                    <p id="ficha-obs" class="text-xs text-gray-700">Sin observaciones registradas.</p>
                 </div>
-            </section>
+            </div>
+        </section>
 
-            <!-- PESTAÑA: EXCLUSIVA NUTRICIONISTA -->
-            <section id="tab-nutri" class="tab-content space-y-6">
-                <div class="bg-white border border-gray-200 rounded-3xl p-6 shadow-sm space-y-4">
-                    <h2 class="text-2xl font-extrabold text-purple-900">Gestión de Pacientes (Exclusivo Nutricionista)</h2>
-                    <p class="text-xs text-gray-600">Hacé clic en cualquier paciente para desplegar sus datos y cargar/actualizar su Ficha Médica y Antropometría.</p>
-                    
-                    <div id="nutri-pacientes-list" class="space-y-3 pt-2">
-                        <!-- Lista desplegable dinámicamente -->
-                    </div>
-                </div>
-            </section>
+        <!-- PESTAÑA: NUTRICIONISTA -->
+        <section id="tab-nutri" class="tab-content space-y-6">
+            <div class="bg-white border border-gray-200 rounded-3xl p-6 shadow-sm space-y-4">
+                <h2 class="text-2xl font-extrabold text-purple-900">Gestión de Pacientes</h2>
+                <div id="nutri-pacientes-list" class="space-y-3 pt-2"></div>
+            </div>
+        </section>
 
-        </div>
     </main>
+
+    <!-- MODAL DE AUTENTICACIÓN Y REGISTRO COMPLETO -->
+    <div id="modal-auth" class="hidden fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-white rounded-3xl p-6 sm:p-8 max-w-md w-full space-y-5 relative shadow-2xl">
+            <button onclick="closeModalAuth()" class="absolute top-5 right-5 text-gray-400 hover:text-gray-600 text-lg">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+            
+            <div class="text-center space-y-1">
+                <h3 class="text-2xl font-extrabold text-gray-900">Ingresá a Nutrición Pam</h3>
+                <p class="text-xs text-gray-500">Iniciá sesión o registrate gratis para pedir turnos.</p>
+            </div>
+
+            <!-- Botones Sociales -->
+            <div class="grid grid-cols-2 gap-3">
+                <button onclick="loginWithGoogle()" class="flex items-center justify-center space-x-2 border border-gray-300 hover:bg-gray-50 p-3 rounded-2xl text-xs font-bold text-gray-700">
+                    <i class="fa-brands fa-google text-red-500 text-base"></i> <span>Google</span>
+                </button>
+                <button onclick="loginWithFacebook()" class="flex items-center justify-center space-x-2 border border-gray-300 hover:bg-gray-50 p-3 rounded-2xl text-xs font-bold text-gray-700">
+                    <i class="fa-brands fa-facebook text-blue-600 text-base"></i> <span>Facebook</span>
+                </button>
+            </div>
+
+            <div class="relative flex items-center justify-center my-2">
+                <div class="border-t border-gray-200 w-full"></div>
+                <span class="bg-white px-3 text-[11px] font-bold text-gray-400 uppercase absolute">o con tu email</span>
+            </div>
+
+            <!-- Formulario Email/Pass -->
+            <div class="space-y-3">
+                <input type="text" id="auth-name" placeholder="Tu Nombre Completo (solo para registro)" class="w-full p-3 border border-gray-300 rounded-xl text-xs bg-sand focus:outline-none focus:border-brand-700">
+                <input type="email" id="auth-email" placeholder="Correo Electrónico" class="w-full p-3 border border-gray-300 rounded-xl text-xs bg-sand focus:outline-none focus:border-brand-700">
+                <input type="password" id="auth-pass" placeholder="Contraseña" class="w-full p-3 border border-gray-300 rounded-xl text-xs bg-sand focus:outline-none focus:border-brand-700">
+                
+                <div class="grid grid-cols-2 gap-2 pt-1">
+                    <button onclick="loginManual()" class="bg-brand-700 hover:bg-brand-800 text-white font-extrabold py-3 rounded-xl text-xs">
+                        Iniciar Sesión
+                    </button>
+                    <button onclick="registerManual()" class="border border-brand-700 text-brand-800 hover:bg-brand-50 font-extrabold py-3 rounded-xl text-xs">
+                        Registrarse
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <script>
         function switchMainTab(tabName) {
@@ -534,6 +583,9 @@
                 btn.classList.remove('text-gray-600');
             }
         }
+
+        function openModalAuth() { document.getElementById('modal-auth').classList.remove('hidden'); }
+        function closeModalAuth() { document.getElementById('modal-auth').classList.add('hidden'); }
     </script>
 </body>
 </html>

@@ -46,9 +46,9 @@
         } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        // Correct complete Firebase configuration for kiwipam-22548
+        // Configuración de Firebase para kiwipam-22548
         const defaultFirebaseConfig = {
-            apiKey: "AIzaSyDwlca5C0qRP0RCUuOk1pbsFqgVP8gsyk0",
+            apiKey: "PEGA_AQUI_TU_API_KEY_COMPLETA_DE_FIREBASE", 
             authDomain: "kiwipam-22548.firebaseapp.com",
             projectId: "kiwipam-22548",
             storageBucket: "kiwipam-22548.firebasestorage.app",
@@ -59,13 +59,13 @@
 
         const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : defaultFirebaseConfig;
 
-        // Initialize Firebase
+        // Inicializar Firebase
         const app = initializeApp(firebaseConfig);
         let analytics = null;
         try {
             analytics = getAnalytics(app);
         } catch (e) {
-            console.log("Analytics initialization skipped:", e);
+            console.log("Analytics omitido:", e);
         }
 
         const auth = getAuth(app);
@@ -76,7 +76,7 @@
         window.firebaseAuth = auth;
         window.firebaseDb = db;
 
-        // Login with Google Popup
+        // Login con Google Popup
         window.loginWithGoogle = async function() {
             try {
                 const result = await signInWithPopup(auth, googleProvider);
@@ -88,7 +88,7 @@
             }
         };
 
-        // Register with Email / Password
+        // Registro con Email / Password
         window.registerWithEmail = async function(email, password, name) {
             try {
                 const userCredential = await createUserWithEmailAndPassword(auth, email, password);
@@ -99,7 +99,7 @@
             }
         };
 
-        // Login with Email / Password
+        // Login con Email / Password
         window.loginWithEmail = async function(email, password) {
             try {
                 const userCredential = await signInWithEmailAndPassword(auth, email, password);
@@ -111,7 +111,7 @@
             }
         };
 
-        // Firebase Auth State Observer
+        // Observador de estado de autenticación
         onAuthStateChanged(auth, (user) => {
             if (user) {
                 handleSuccessfulAuth(user.displayName || user.email.split('@')[0], user.email);
@@ -176,7 +176,7 @@
 </head>
 <body class="min-h-screen flex flex-col justify-between antialiased selection:bg-brand-100 selection:text-brand-800">
 
-    <!-- Top Announcement Bar -->
+    <!-- Barra Superior -->
     <div class="bg-brand-900 text-white py-2 px-4 border-b border-brand-800 text-sm sticky top-0 z-40 shadow-sm">
         <div class="max-w-7xl mx-auto flex flex-wrap justify-between items-center gap-2">
             <div class="flex items-center space-x-2">
@@ -198,7 +198,7 @@
         </div>
     </div>
 
-    <!-- Main Navigation Header -->
+    <!-- Navegación Principal -->
     <header id="app-header" class="hidden bg-white border-b border-gray-200 sticky top-[37px] z-30 shadow-sm">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div class="flex justify-between h-20 items-center">
@@ -254,10 +254,10 @@
         </div>
     </header>
 
-    <!-- Main Container -->
+    <!-- Contenido Principal -->
     <main class="flex-grow max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
         
-        <!-- LOGIN GATE -->
+        <!-- PANTALLA DE ACCESO -->
         <section id="login-gate" class="min-h-[75vh] flex items-center justify-center py-6">
             <div class="bg-white border border-gray-200 rounded-3xl shadow-xl p-8 sm:p-12 max-w-md w-full space-y-6 relative overflow-hidden">
                 
@@ -269,7 +269,7 @@
                     <p class="text-sm font-semibold text-brand-700">Dra. Pamela Lagardo • Nutrición Integral</p>
                 </div>
 
-                <!-- Google Auth Button -->
+                <!-- Botón Google Auth -->
                 <button onclick="loginWithGoogle()" class="w-full bg-white hover:bg-gray-50 text-gray-700 font-bold py-3.5 px-4 border-2 border-gray-300 rounded-2xl flex items-center justify-center space-x-3 transition shadow-sm hover:border-gray-400">
                     <svg class="w-5 h-5" viewBox="0 0 24 24">
                         <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
@@ -286,13 +286,13 @@
                     <div class="flex-grow border-t border-gray-200"></div>
                 </div>
 
-                <!-- Toggle Auth Mode Tabs -->
+                <!-- Pestañas de Modo de Acceso -->
                 <div class="flex border-b border-gray-200">
                     <button id="tab-login-btn" onclick="toggleAuthTab('login')" class="w-1/2 py-2 text-sm font-bold border-b-2 border-brand-700 text-brand-800">Iniciar Sesión</button>
                     <button id="tab-register-btn" onclick="toggleAuthTab('register')" class="w-1/2 py-2 text-sm font-bold text-gray-400 border-b-2 border-transparent hover:text-gray-600">Registrarse</button>
                 </div>
 
-                <!-- Form Login / Register -->
+                <!-- Formulario -->
                 <form id="auth-form" onsubmit="handleAuthSubmit(event)" class="space-y-4">
                     <div id="name-field-container" class="hidden">
                         <label class="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">Nombre Completo</label>
@@ -314,7 +314,7 @@
             </div>
         </section>
 
-        <!-- APP CONTENT -->
+        <!-- PANEL APP -->
         <div id="app-container" class="hidden">
             <section id="tab-dashboard" class="tab-content active space-y-8">
                 <div class="bg-gradient-to-r from-brand-800 to-brand-900 rounded-3xl p-6 sm:p-8 text-white shadow-lg">

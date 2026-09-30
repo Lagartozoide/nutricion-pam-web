@@ -48,7 +48,7 @@
 
         // Configuración oficial de Firebase obtenida de tu proyecto
         const defaultFirebaseConfig = {
-            apiKey: "AIzaSyB4c9pQf8MQMR5A8qe1SKsns5S8euESNiY",
+            apiKey: "AIzaSyDwlca5C0qRP0RCUuOk1pbsFqgVP8gsyk0",
             authDomain: "kiwipam-22548.firebaseapp.com",
             projectId: "kiwipam-22548",
             storageBucket: "kiwipam-22548.firebasestorage.app",
@@ -242,7 +242,7 @@
                             <span id="user-avatar-initials">NC</span>
                         </div>
                         <div class="text-left">
-                            <span id="user-display-name" class="block text-xs font-extrabold text-gray-900 leading-none">Nahuel Cañete</span>
+                            <span id="user-display-name" class="block text-xs font-extrabold text-gray-900 leading-none">Paciente</span>
                             <span class="text-[11px] text-brand-700 font-semibold">Paciente Activo</span>
                         </div>
                     </div>
@@ -269,7 +269,6 @@
                     <p class="text-sm font-semibold text-brand-700">Dra. Pamela Lagardo • Nutrición Integral</p>
                 </div>
 
-                <!-- Botón Google Auth -->
                 <button onclick="loginWithGoogle()" class="w-full bg-white hover:bg-gray-50 text-gray-700 font-bold py-3.5 px-4 border-2 border-gray-300 rounded-2xl flex items-center justify-center space-x-3 transition shadow-sm hover:border-gray-400">
                     <svg class="w-5 h-5" viewBox="0 0 24 24">
                         <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
@@ -286,13 +285,11 @@
                     <div class="flex-grow border-t border-gray-200"></div>
                 </div>
 
-                <!-- Pestañas de Modo de Acceso -->
                 <div class="flex border-b border-gray-200">
                     <button id="tab-login-btn" onclick="toggleAuthTab('login')" class="w-1/2 py-2 text-sm font-bold border-b-2 border-brand-700 text-brand-800">Iniciar Sesión</button>
                     <button id="tab-register-btn" onclick="toggleAuthTab('register')" class="w-1/2 py-2 text-sm font-bold text-gray-400 border-b-2 border-transparent hover:text-gray-600">Registrarse</button>
                 </div>
 
-                <!-- Formulario -->
                 <form id="auth-form" onsubmit="handleAuthSubmit(event)" class="space-y-4">
                     <div id="name-field-container" class="hidden">
                         <label class="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">Nombre Completo</label>
@@ -314,14 +311,210 @@
             </div>
         </section>
 
-        <!-- PANEL APP -->
+        <!-- PANEL APP CON TODAS LAS SECCIONES COMPLETAS -->
         <div id="app-container" class="hidden">
+            
+            <!-- PESTAÑA: MI PANEL -->
             <section id="tab-dashboard" class="tab-content active space-y-8">
-                <div class="bg-gradient-to-r from-brand-800 to-brand-900 rounded-3xl p-6 sm:p-8 text-white shadow-lg">
-                    <h1 class="text-3xl sm:text-4xl font-extrabold">¡Hola, <span id="welcome-user-name">Nahuel</span>!</h1>
-                    <p class="mt-2 text-brand-100">Gestioná tus consultas, turnos y plan de alimentación.</p>
+                <div class="bg-gradient-to-r from-brand-800 to-brand-900 rounded-3xl p-6 sm:p-8 text-white shadow-lg flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+                    <div>
+                        <span class="inline-block px-3 py-1 bg-brand-700/60 rounded-full text-xs font-bold tracking-wide uppercase mb-3">Portal Nutricional Activo</span>
+                        <h1 class="text-3xl sm:text-4xl font-extrabold">¡Hola, <span id="welcome-user-name">Paciente</span>!</h1>
+                        <p class="mt-2 text-brand-100 max-w-xl text-sm sm:text-base">Gestioná tus turnos, mirá tu plan de alimentación personalizado o comprá en la tienda saludable.</p>
+                    </div>
+                    <button onclick="switchMainTab('turnos')" class="bg-white text-brand-900 hover:bg-brand-50 px-6 py-3.5 rounded-2xl font-extrabold text-sm transition shadow flex items-center space-x-2">
+                        <i class="fa-solid fa-calendar-plus text-brand-700"></i>
+                        <span>Reservar Próxima Cita</span>
+                    </button>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div class="bg-white border border-gray-200 rounded-3xl p-6 shadow-sm hover:shadow-md transition">
+                        <div class="w-12 h-12 rounded-2xl bg-brand-50 text-brand-700 flex items-center justify-center text-xl font-bold mb-4">
+                            <i class="fa-solid fa-calendar-check"></i>
+                        </div>
+                        <h3 class="font-extrabold text-lg text-gray-900">Próximo Turno</h3>
+                        <p class="text-sm text-gray-500 mt-1">Sin turnos agendados por el momento.</p>
+                        <button onclick="switchMainTab('turnos')" class="mt-4 text-xs font-extrabold text-brand-700 hover:underline inline-flex items-center space-x-1">
+                            <span>Agendar turno ahora</span>
+                            <i class="fa-solid fa-chevron-right text-[10px]"></i>
+                        </button>
+                    </div>
+
+                    <div class="bg-white border border-gray-200 rounded-3xl p-6 shadow-sm hover:shadow-md transition">
+                        <div class="w-12 h-12 rounded-2xl bg-amber-50 text-amber-700 flex items-center justify-center text-xl font-bold mb-4">
+                            <i class="fa-solid fa-utensils"></i>
+                        </div>
+                        <h3 class="font-extrabold text-lg text-gray-900">Plan Nutricional</h3>
+                        <p class="text-sm text-gray-500 mt-1">Plan de composición corporal e hidratación disponible.</p>
+                        <button onclick="switchMainTab('plan')" class="mt-4 text-xs font-extrabold text-amber-700 hover:underline inline-flex items-center space-x-1">
+                            <span>Ver mi menú diario</span>
+                            <i class="fa-solid fa-chevron-right text-[10px]"></i>
+                        </button>
+                    </div>
+
+                    <div class="bg-white border border-gray-200 rounded-3xl p-6 shadow-sm hover:shadow-md transition">
+                        <div class="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-700 flex items-center justify-center text-xl font-bold mb-4">
+                            <i class="fa-solid fa-store"></i>
+                        </div>
+                        <h3 class="font-extrabold text-lg text-gray-900">Tienda Saludable</h3>
+                        <p class="text-sm text-gray-500 mt-1">Snacks, suplementos e insumos recomendados.</p>
+                        <button onclick="switchMainTab('tienda')" class="mt-4 text-xs font-extrabold text-emerald-700 hover:underline inline-flex items-center space-x-1">
+                            <span>Explorar productos</span>
+                            <i class="fa-solid fa-chevron-right text-[10px]"></i>
+                        </button>
+                    </div>
                 </div>
             </section>
+
+            <!-- PESTAÑA: AGENDAR TURNO -->
+            <section id="tab-turnos" class="tab-content space-y-6">
+                <div class="bg-white border border-gray-200 rounded-3xl p-6 sm:p-8 shadow-sm">
+                    <h2 class="text-2xl font-extrabold text-gray-900 mb-2">Agendá tu Turno Nutricional</h2>
+                    <p class="text-sm text-gray-600 mb-6">Seleccioná la modalidad, fecha y hora disponible para tu consulta con la Dra. Pamela Lagardo.</p>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">1. Modalidad de Consulta</label>
+                                <div class="grid grid-cols-2 gap-3">
+                                    <button class="border-2 border-brand-700 bg-brand-50 p-4 rounded-2xl text-left font-bold text-brand-900 text-sm">
+                                        <i class="fa-solid fa-user-doctor text-brand-700 block text-lg mb-1"></i>
+                                        Presencial (Posadas)
+                                    </button>
+                                    <button class="border-2 border-gray-200 hover:border-brand-700 p-4 rounded-2xl text-left font-bold text-gray-700 text-sm">
+                                        <i class="fa-solid fa-laptop text-gray-500 block text-lg mb-1"></i>
+                                        Online (Video)
+                                    </button>
+                                </div>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">2. Seleccionar Fecha</label>
+                                <input type="date" class="w-full p-3.5 rounded-2xl border border-gray-300 bg-sand text-sm font-semibold text-gray-800">
+                            </div>
+                        </div>
+
+                        <div class="space-y-4">
+                            <label class="block text-xs font-bold text-gray-700 uppercase tracking-wider">3. Horarios Disponibles</label>
+                            <div class="grid grid-cols-3 gap-2">
+                                <button class="py-3 border border-gray-300 hover:border-brand-700 hover:bg-brand-50 rounded-xl text-xs font-bold text-gray-800">09:00 hs</button>
+                                <button class="py-3 border border-gray-300 hover:border-brand-700 hover:bg-brand-50 rounded-xl text-xs font-bold text-gray-800">10:30 hs</button>
+                                <button class="py-3 border border-gray-300 hover:border-brand-700 hover:bg-brand-50 rounded-xl text-xs font-bold text-gray-800">14:00 hs</button>
+                                <button class="py-3 border border-gray-300 hover:border-brand-700 hover:bg-brand-50 rounded-xl text-xs font-bold text-gray-800">16:30 hs</button>
+                                <button class="py-3 border border-gray-300 hover:border-brand-700 hover:bg-brand-50 rounded-xl text-xs font-bold text-gray-800">18:00 hs</button>
+                                <button class="py-3 border border-gray-300 hover:border-brand-700 hover:bg-brand-50 rounded-xl text-xs font-bold text-gray-800">19:15 hs</button>
+                            </div>
+                            <button onclick="alert('¡Turno reservado correctamente con la Dra. Pamela Lagardo!')" class="w-full mt-4 bg-brand-700 hover:bg-brand-800 text-white font-extrabold py-3.5 px-4 rounded-2xl transition shadow-md text-sm">
+                                Confirmar y Reservar Turno
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- PESTAÑA: TIENDA SALUDABLE -->
+            <section id="tab-tienda" class="tab-content space-y-6">
+                <div class="flex justify-between items-center">
+                    <div>
+                        <h2 class="text-2xl font-extrabold text-gray-900">Tienda Nutrición Pam</h2>
+                        <p class="text-xs sm:text-sm text-gray-600">Insumos y suplementación seleccionada para acompañar tu proceso.</p>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                    <div class="bg-white border border-gray-200 rounded-3xl p-5 shadow-sm space-y-3">
+                        <div class="h-40 bg-sand rounded-2xl flex items-center justify-center text-4xl">🧉</div>
+                        <h3 class="font-extrabold text-gray-900">Yerba Mate Orgánica YASY</h3>
+                        <p class="text-xs text-gray-500">Yerba mate especial seleccionada, sin polvillo, origen Misiones.</p>
+                        <div class="flex justify-between items-center pt-2">
+                            <span class="font-black text-brand-800">$4.500</span>
+                            <button onclick="alert('Producto agregado al carrito')" class="px-4 py-2 bg-brand-700 text-white text-xs font-bold rounded-xl hover:bg-brand-800">
+                                Agregar <i class="fa-solid fa-cart-plus ml-1"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="bg-white border border-gray-200 rounded-3xl p-5 shadow-sm space-y-3">
+                        <div class="h-40 bg-sand rounded-2xl flex items-center justify-center text-4xl">💊</div>
+                        <h3 class="font-extrabold text-gray-900">Magnesio Citrato Premium</h3>
+                        <p class="text-xs text-gray-500">Suplemento para descanso y recuperación muscular (60 caps).</p>
+                        <div class="flex justify-between items-center pt-2">
+                            <span class="font-black text-brand-800">$12.900</span>
+                            <button onclick="alert('Producto agregado al carrito')" class="px-4 py-2 bg-brand-700 text-white text-xs font-bold rounded-xl hover:bg-brand-800">
+                                Agregar <i class="fa-solid fa-cart-plus ml-1"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="bg-white border border-gray-200 rounded-3xl p-5 shadow-sm space-y-3">
+                        <div class="h-40 bg-sand rounded-2xl flex items-center justify-center text-4xl">🥜</div>
+                        <h3 class="font-extrabold text-gray-900">Mix Frutos Secos Activa</h3>
+                        <p class="text-xs text-gray-500">Nueces, almendras y castañas seleccionadas de bajo sodio (500g).</p>
+                        <div class="flex justify-between items-center pt-2">
+                            <span class="font-black text-brand-800">$6.200</span>
+                            <button onclick="alert('Producto agregado al carrito')" class="px-4 py-2 bg-brand-700 text-white text-xs font-bold rounded-xl hover:bg-brand-800">
+                                Agregar <i class="fa-solid fa-cart-plus ml-1"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- PESTAÑA: MI PLAN -->
+            <section id="tab-plan" class="tab-content space-y-6">
+                <div class="bg-white border border-gray-200 rounded-3xl p-6 sm:p-8 shadow-sm space-y-6">
+                    <div class="flex justify-between items-center border-b border-gray-100 pb-4">
+                        <div>
+                            <h2 class="text-2xl font-extrabold text-gray-900">Plan de Alimentación Personalizado</h2>
+                            <p class="text-xs sm:text-sm text-gray-600">Guía adaptada a tus objetivos nutricionales.</p>
+                        </div>
+                        <span class="px-3 py-1 bg-emerald-100 text-emerald-800 text-xs font-extrabold rounded-full">Activo</span>
+                    </div>
+
+                    <div class="space-y-4">
+                        <div class="p-4 bg-sand rounded-2xl border border-gray-200">
+                            <h4 class="font-bold text-brand-800 text-sm">Desayuno / Merienda</h4>
+                            <p class="text-xs text-gray-700 mt-1">Infusión sin azúcar + 2 tostadas de pan de masa madre con huevo revuelto y palta.</p>
+                        </div>
+                        <div class="p-4 bg-sand rounded-2xl border border-gray-200">
+                            <h4 class="font-bold text-brand-800 text-sm">Almuerzo</h4>
+                            <p class="text-xs text-gray-700 mt-1">1/2 plato de vegetales frescos o cocidos, 1/4 plato de proteína magma (pollo/pescado/carne) y 1/4 carbohidrato complejo (arroz integral/camote).</p>
+                        </div>
+                        <div class="p-4 bg-sand rounded-2xl border border-gray-200">
+                            <h4 class="font-bold text-brand-800 text-sm">Cena</h4>
+                            <p class="text-xs text-gray-700 mt-1">Tortilla de vegetales variados o ensalada proteica rica en semillas y vegetales verdes.</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- PESTAÑA: FICHA MÉDICA -->
+            <section id="tab-ficha" class="tab-content space-y-6">
+                <div class="bg-white border border-gray-200 rounded-3xl p-6 sm:p-8 shadow-sm space-y-4">
+                    <h2 class="text-2xl font-extrabold text-gray-900">Ficha Médica & Antropometría</h2>
+                    <p class="text-xs sm:text-sm text-gray-600">Historial y mediciones registradas por la Dra. Pamela Lagardo.</p>
+                    
+                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-4">
+                        <div class="p-4 bg-sand rounded-2xl text-center">
+                            <span class="block text-xs font-bold text-gray-500 uppercase">Peso</span>
+                            <span class="text-xl font-extrabold text-gray-900">-- kg</span>
+                        </div>
+                        <div class="p-4 bg-sand rounded-2xl text-center">
+                            <span class="block text-xs font-bold text-gray-500 uppercase">Altura</span>
+                            <span class="text-xl font-extrabold text-gray-900">-- cm</span>
+                        </div>
+                        <div class="p-4 bg-sand rounded-2xl text-center">
+                            <span class="block text-xs font-bold text-gray-500 uppercase">% Masa Grasa</span>
+                            <span class="text-xl font-extrabold text-gray-900">-- %</span>
+                        </div>
+                        <div class="p-4 bg-sand rounded-2xl text-center">
+                            <span class="block text-xs font-bold text-gray-500 uppercase">% Masa Muscular</span>
+                            <span class="text-xl font-extrabold text-gray-900">-- %</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
         </div>
     </main>
 
@@ -363,8 +556,19 @@
 
         function switchMainTab(tabName) {
             document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.nav-btn').forEach(b => {
+                b.classList.remove('bg-white', 'text-brand-800', 'shadow-sm');
+                b.classList.add('text-gray-600');
+            });
+
             const target = document.getElementById('tab-' + tabName);
             if (target) target.classList.add('active');
+
+            const btn = document.querySelector(`[data-tab="${tabName}"]`);
+            if (btn) {
+                btn.classList.add('bg-white', 'text-brand-800', 'shadow-sm');
+                btn.classList.remove('text-gray-600');
+            }
         }
 
         function adjustFont(delta) {

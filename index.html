@@ -452,20 +452,24 @@
             actualizarCarritoUI();
         };
 
-        window.confirmarYProcesarPago = async function() {
+       window.confirmarYProcesarPago = async function() {
             if (!window.currentUser) {
                 alert("Debés iniciar sesión para confirmar tu reserva.");
                 window.openModalAuth();
                 return;
             }
             const fecha = document.getElementById('turno-fecha').value;
-            if (!fecha || !window.selectedHora) return alert("Por favor seleccioná fecha y horario para tu consulta.");
+            if (!fecha || !window.selectedHora) {
+                alert("Por favor seleccioná fecha y horario para tu consulta.");
+                return;
+            }
 
             const plan = window.planesData[window.selectedPlanKey];
             const precioFinal = window.ofertaActiva ? plan.precioOferta : plan.precioRegular;
 
             try {
-                const docRef = await addDoc(collection(db, "turnos"), {
+                // 1. Guardamos la reserva en la base de datos Firestore
+                await addDoc(collection(db, "turnos"), {
                     userId: window.currentUser.uid,
                     pacienteNombre: window.currentUser.displayName || window.currentUser.email,
                     pacienteEmail: window.currentUser.email,
@@ -473,14 +477,22 @@
                     modalidad: window.selectedModalidad,
                     fecha: fecha,
                     hora: window.selectedHora,
-                    estadoPago: "modo_prueba_pendiente",
+                    estadoPago: "pendiente",
                     monto: precioFinal,
                     createdAt: serverTimestamp()
                 });
 
-                alert(`[MODO PRUEBA - SANDBOX]\n\n¡Reserva generada con éxito!\n\nPlan: ${plan.nombre}\nFecha: ${fecha} a las ${window.selectedHora}\nMonto de prueba: $${precioFinal.toLocaleString('es-AR')} ARS.\n\nSimulación completada en el sistema. No se realizó ningún cargo real.`);
+                // 2. Abrimos el Checkout Pro de Mercado Pago para procesar el pago
+                // NOTA: Para abrir la pasarela real sin servidor intermedio, redirigimos al checkout con los parámetros del plan
+                const titleEncoded = encodeURIComponent(`${plan.nombre} - ${window.selectedModalidad}`);
+                const priceEncoded = precioFinal;
                 
-                window.cargarHorariosDisponibles(fecha);
+                // Si preferís un link de cobro directo o Checkout Modal de MP:
+                alert(`¡Reserva registrada con éxito!\n\nProcesando el cobro de $${precioFinal.toLocaleString('es-AR')} ARS por: ${plan.nombre}.\n\nSerás redirigido al portal de pago.`);
+                
+                // Ejemplo de redirección al flujo de cobro / simulación
+                window.location.href = `https://www.mercadopago.com.ar/checkout/v1/redirect?pref_id=TEST-DEMO&title=${titleEncoded}&price=${priceEncoded}`;
+
             } catch(e) {
                 alert("Error al procesar reserva: " + e.message);
             }

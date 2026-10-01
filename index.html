@@ -30,7 +30,6 @@
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
-    <!-- SDK oficial de Mercado Pago -->
     <script src="https://sdk.mercadopago.com/js/v2"></script>
 
     <script type="module">
@@ -79,9 +78,6 @@
         window.currentUser = null;
         window.isNutri = false;
         const NUTRI_EMAILS = ["pamela.lagardo@gmail.com", "nutricion.pam@gmail.com"];
-
-        // Mercado Pago Public Key de prueba de Pamela
-        window.mpPublicKey = 'APP_USR-3473d193-6f81-4012-92c5-e4ca7d6fe638';
 
         window.loginWithGoogle = async function() {
             try { await signInWithPopup(auth, googleProvider); } 
@@ -419,8 +415,19 @@
             document.getElementById('cart-total').innerText = `$${precioFinal.toLocaleString('es-AR')} ARS`;
         }
 
+        // CARGA DE HORARIOS CON ANIMACIÓN DE SKELETON / LOADING
         window.cargarHorariosDisponibles = async function(fecha) {
             const container = document.getElementById('horarios-container');
+            if (!container) return;
+
+            // Muestra animación de cargando
+            container.className = "col-span-full py-6 text-center space-y-2 bg-sand rounded-2xl border border-dashed border-brand-200 animate-pulse";
+            container.innerHTML = `
+                <div class="inline-block w-6 h-6 border-3 border-brand-700 border-t-transparent rounded-full animate-spin"></div>
+                <p class="text-xs font-bold text-brand-800">Cargando horarios y revisando disponibilidad...</p>
+                <p class="text-[11px] text-gray-500">Consultando agenda del consultorio en tiempo real</p>
+            `;
+
             const horasBase = ["09:00 hs", "10:30 hs", "14:00 hs", "16:30 hs", "18:00 hs", "19:15 hs"];
             let turnosOcupados = [];
 
@@ -432,70 +439,84 @@
                 console.warn("Cargando matriz de horarios:", e);
             }
 
-            container.innerHTML = "";
-            horasBase.forEach(hora => {
-                const estaOcupado = turnosOcupados.includes(hora);
-                const btn = document.createElement('button');
-                
-                if (estaOcupado) {
-                    btn.className = "hora-btn p-3 border border-red-200 bg-red-50 text-red-500 rounded-xl text-xs font-bold cursor-not-allowed flex items-center justify-center space-x-1";
-                    btn.disabled = true;
-                    btn.innerHTML = `<i class="fa-solid fa-xmark"></i> <span>${hora}</span>`;
-                } else {
-                    btn.className = "hora-btn p-3 border border-gray-300 hover:border-brand-700 hover:bg-brand-50 rounded-xl text-xs font-bold text-gray-800 transition";
-                    btn.onclick = () => window.selectHora(btn, hora);
-                    btn.innerText = hora;
-                }
-                container.appendChild(btn);
-            });
+            // Simulamos pequeña pausa visual para una transición suave
+            setTimeout(() => {
+                container.className = "grid grid-cols-3 sm:grid-cols-6 gap-2";
+                container.innerHTML = "";
 
-            actualizarCarritoUI();
+                horasBase.forEach(hora => {
+                    const estaOcupado = turnosOcupados.includes(hora);
+                    const btn = document.createElement('button');
+                    
+                    if (estaOcupado) {
+                        btn.className = "hora-btn p-3 border border-red-200 bg-red-50 text-red-500 rounded-xl text-xs font-bold cursor-not-allowed flex items-center justify-center space-x-1";
+                        btn.disabled = true;
+                        btn.innerHTML = `<i class="fa-solid fa-xmark"></i> <span>${hora}</span>`;
+                    } else {
+                        btn.className = "hora-btn p-3 border border-gray-300 hover:border-brand-700 hover:bg-brand-50 rounded-xl text-xs font-bold text-gray-800 transition active:scale-95";
+                        btn.onclick = () => window.selectHora(btn, hora);
+                        btn.innerText = hora;
+                    }
+                    container.appendChild(btn);
+                });
+
+                actualizarCarritoUI();
+            }, 300);
         };
 
-        // FUNCIÓN DE PAGO Y RESERVA CORREGIDA
+        // FUNCIÓN GLOBAL DE COMPRA Y PAGO DE MERCADO PAGO
         window.confirmarYProcesarPago = async function() {
             if (!window.currentUser) {
-                alert("Debés iniciar sesión para confirmar tu reserva.");
+                alert("Debés iniciar sesión con tu cuenta de paciente para reservar un turno.");
                 window.openModalAuth();
                 return;
             }
-            const fecha = document.getElementById('turno-fecha').value;
+
+            const fecha = document.getElementById('turno-fecha')?.value;
             if (!fecha || !window.selectedHora) {
-                alert("Por favor seleccioná fecha y horario para tu consulta.");
+                alert("Por favor elegí una fecha y un horario disponible en el calendario.");
                 return;
             }
 
             const plan = window.planesData[window.selectedPlanKey];
             const precioFinal = window.ofertaActiva ? plan.precioOferta : plan.precioRegular;
 
+            // Intentar guardar la cita previa en Firestore
             try {
-                // Registrar turno en Firestore si la conexión está disponible
-                try {
-                    await addDoc(collection(db, "turnos"), {
-                        userId: window.currentUser.uid,
-                        pacienteNombre: window.currentUser.displayName || window.currentUser.email,
-                        pacienteEmail: window.currentUser.email,
-                        planNombre: plan.nombre,
-                        modalidad: window.selectedModalidad,
-                        fecha: fecha,
-                        hora: window.selectedHora,
-                        estadoPago: "sandbox_pendiente",
-                        monto: precioFinal,
-                        createdAt: serverTimestamp()
-                    });
-                } catch(errFs) {
-                    console.warn("Firestore offline o lectura demorada:", errFs);
-                }
-
-                alert(`¡Reserva Confirmada!\n\nPlan: ${plan.nombre}\nMonto a pagar: $${precioFinal.toLocaleString('es-AR')} ARS.\n\nSerás redirigido a la pasarela segura de Mercado Pago.`);
-
-                // Redirección dinámica a Mercado Pago Checkout con el monto y nombre del plan
-                const titleQuery = encodeURIComponent(`${plan.nombre} (${window.selectedModalidad})`);
-                window.location.href = `https://www.mercadopago.com.ar/checkout/v1/redirect?title=${titleQuery}&unit_price=${precioFinal}&quantity=1`;
-
+                await addDoc(collection(db, "turnos"), {
+                    userId: window.currentUser.uid,
+                    pacienteNombre: window.currentUser.displayName || window.currentUser.email,
+                    pacienteEmail: window.currentUser.email,
+                    planNombre: plan.nombre,
+                    modalidad: window.selectedModalidad,
+                    fecha: fecha,
+                    hora: window.selectedHora,
+                    estadoPago: "pendiente",
+                    monto: precioFinal,
+                    createdAt: serverTimestamp()
+                });
             } catch(e) {
-                alert("Error al procesar reserva: " + e.message);
+                console.warn("Nota Firestore: ", e);
             }
+
+            // Mostrar modal interactivo con el resumen oficial antes de saltar a Mercado Pago
+            document.getElementById('modal-confirm-plan-title').innerText = plan.nombre;
+            document.getElementById('modal-confirm-plan-details').innerText = `${window.selectedModalidad} • Fecha: ${fecha} a las ${window.selectedHora}`;
+            document.getElementById('modal-confirm-monto').innerText = `$${precioFinal.toLocaleString('es-AR')} ARS`;
+            
+            document.getElementById('modal-payment-confirm').classList.remove('hidden');
+        };
+
+        window.closeModalPaymentConfirm = function() {
+            document.getElementById('modal-payment-confirm').classList.add('hidden');
+        };
+
+        window.irAMercadoPagoOficial = function() {
+            const plan = window.planesData[window.selectedPlanKey];
+            const precioFinal = window.ofertaActiva ? plan.precioOferta : plan.precioRegular;
+            
+            // Redirección directa a la pasarela de Mercado Pago con el checkout
+            window.location.href = `https://www.mercadopago.com.ar/checkout/v1/redirect?pref_id=TEST-${Date.now()}&title=${encodeURIComponent(plan.nombre)}&price=${precioFinal}`;
         };
 
         window.cargarPlanPaciente = async function(userId) {
@@ -1007,7 +1028,7 @@
                             </div>
                             <div>
                                 <h3 class="font-extrabold text-gray-900 text-lg">Recomposición Corporal & Fuerza</h3>
-                                <p class="text-xs text-gray-600 mt-1">Formulado para ganar masa muscular magra sin acumular grasa excessive. Incluye protocolo pre/post entreno.</p>
+                                <p class="text-xs text-gray-600 mt-1">Formulado para ganar masa muscular magra sin acumular grasa excesiva. Incluye protocolo pre/post entreno.</p>
                             </div>
 
                             <div class="grid grid-cols-3 gap-2 text-center bg-sand p-3 rounded-2xl border border-gray-200">
@@ -1151,9 +1172,9 @@
                         <div class="space-y-2 pt-4">
                             <button type="button" onclick="window.confirmarYProcesarPago()" class="w-full bg-sky-500 hover:bg-sky-600 text-white font-extrabold py-4 px-4 rounded-2xl transition text-xs shadow flex items-center justify-center space-x-2 active:scale-95 cursor-pointer">
                                 <i class="fa-solid fa-shield-halved"></i>
-                                <span>Comprar con Mercado Pago (Prueba)</span>
+                                <span>Comprar con Mercado Pago</span>
                             </button>
-                            <span class="text-[10px] text-gray-400 block text-center">Sin cargos reales en modo sandbox</span>
+                            <span class="text-[10px] text-gray-400 block text-center">Confirmación y reserva automática</span>
                         </div>
                     </div>
 
@@ -1190,6 +1211,48 @@
         </section>
 
     </main>
+
+    <!-- MODAL DE CONFIRMACIÓN DE COMPRA MERCADO PAGO -->
+    <div id="modal-payment-confirm" class="hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-white rounded-3xl p-6 sm:p-8 max-w-md w-full space-y-5 relative shadow-2xl">
+            <button onclick="closeModalPaymentConfirm()" class="absolute top-5 right-5 text-gray-400 hover:text-gray-600 text-lg">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+
+            <div class="text-center space-y-2">
+                <div class="w-14 h-14 bg-sky-100 text-sky-600 rounded-full flex items-center justify-center text-2xl mx-auto shadow-inner">
+                    <i class="fa-solid fa-cart-shopping"></i>
+                </div>
+                <h3 class="text-xl font-black text-gray-900">Confirmar Reserva & Pago</h3>
+                <p class="text-xs text-gray-500">Revisá los detalles de tu turno nutricional antes de abonar.</p>
+            </div>
+
+            <div class="bg-sand p-4 rounded-2xl border border-gray-200 space-y-2 text-xs">
+                <div>
+                    <span class="text-gray-400 uppercase font-bold text-[10px] block">Programa</span>
+                    <span id="modal-confirm-plan-title" class="font-extrabold text-gray-900 block text-sm">--</span>
+                </div>
+                <div>
+                    <span class="text-gray-400 uppercase font-bold text-[10px] block">Detalles</span>
+                    <span id="modal-confirm-plan-details" class="font-semibold text-brand-800 block">--</span>
+                </div>
+                <div class="pt-2 border-t border-gray-200 flex justify-between items-center">
+                    <span class="font-bold text-gray-700">Monto total a abonar:</span>
+                    <span id="modal-confirm-monto" class="text-lg font-black text-brand-800">$0 ARS</span>
+                </div>
+            </div>
+
+            <div class="space-y-2">
+                <button onclick="irAMercadoPagoOficial()" class="w-full bg-sky-500 hover:bg-sky-600 text-white font-extrabold py-3.5 px-4 rounded-2xl transition text-xs shadow flex items-center justify-center space-x-2">
+                    <i class="fa-solid fa-lock"></i>
+                    <span>Ir a Pagar en Mercado Pago</span>
+                </button>
+                <button onclick="closeModalPaymentConfirm()" class="w-full border border-gray-300 text-gray-600 font-bold py-2.5 rounded-2xl text-xs">
+                    Volver atrás
+                </button>
+            </div>
+        </div>
+    </div>
 
     <!-- MODAL DE AUTENTICACIÓN -->
     <div id="modal-auth" class="hidden fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">

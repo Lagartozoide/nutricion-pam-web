@@ -30,6 +30,9 @@
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
+    <!-- SDK oficial de Mercado Pago -->
+    <script src="https://sdk.mercadopago.com/js/v2"></script>
+
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { 
@@ -40,7 +43,8 @@
             createUserWithEmailAndPassword, 
             signInWithEmailAndPassword, 
             onAuthStateChanged, 
-            signOut 
+            signOut,
+            updateProfile 
         } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { 
             getFirestore, 
@@ -76,7 +80,9 @@
         window.isNutri = false;
         const NUTRI_EMAILS = ["pamela.lagardo@gmail.com", "nutricion.pam@gmail.com"];
 
-        // Autenticaciones
+        // Inicializamos Mercado Pago con tu Public Key de Prueba
+        const mp = new MercadoPago('APP_USR-3473d193-6f81-4012-92c5-e4ca7d6fe638', { locale: 'es-AR' });
+
         window.loginWithGoogle = async function() {
             try { await signInWithPopup(auth, googleProvider); } 
             catch (e) { alert("Error con Google: " + e.message); }
@@ -112,6 +118,7 @@
             if (user) {
                 window.currentUser = user;
                 window.isNutri = NUTRI_EMAILS.includes(user.email.toLowerCase());
+                window.closeModalAuth();
                 renderLoggedInUI(user);
             } else {
                 window.currentUser = null;
@@ -119,16 +126,29 @@
             }
         });
 
-        function renderLoggedInUI(user) {
+        async function renderLoggedInUI(user) {
             const name = user.displayName || user.email.split('@')[0];
             document.getElementById('auth-badge').classList.remove('hidden');
             document.getElementById('btn-open-login').classList.add('hidden');
             document.getElementById('user-display-name').innerText = name;
             
-            // Hero Panel Logueado
+            const avatarContainer = document.getElementById('user-avatar-container');
+            if (user.photoURL) {
+                avatarContainer.innerHTML = `<img src="${user.photoURL}" class="w-full h-full rounded-full object-cover border border-brand-700">`;
+            } else {
+                const initials = name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
+                avatarContainer.innerHTML = `<span class="font-bold text-sm text-white">${initials || 'PL'}</span>`;
+            }
+
             document.getElementById('hero-guest').classList.add('hidden');
             document.getElementById('hero-user').classList.remove('hidden');
             document.getElementById('welcome-user-name').innerText = name.split(' ')[0];
+
+            document.getElementById('plan-offline-card').classList.add('hidden');
+            document.getElementById('plan-online-card').classList.remove('hidden');
+
+            document.getElementById('ficha-offline-card').classList.add('hidden');
+            document.getElementById('ficha-online-card').classList.remove('hidden');
 
             if (window.isNutri) {
                 document.getElementById('nav-nutri-panel').classList.remove('hidden');
@@ -139,6 +159,7 @@
             }
 
             window.cargarFichaMedicaPaciente(user.uid);
+            window.cargarPlanPaciente(user.uid);
             if (window.isNutri) window.cargarListaPacientesNutri();
         }
 
@@ -147,16 +168,203 @@
             document.getElementById('btn-open-login').classList.remove('hidden');
             document.getElementById('nav-nutri-panel').classList.add('hidden');
             
-            // Hero Panel Invitado
             document.getElementById('hero-user').classList.add('hidden');
             document.getElementById('hero-guest').classList.remove('hidden');
+
+            document.getElementById('plan-online-card').classList.add('hidden');
+            document.getElementById('plan-offline-card').classList.remove('hidden');
+
+            document.getElementById('ficha-online-card').classList.add('hidden');
+            document.getElementById('ficha-offline-card').classList.remove('hidden');
         }
 
         window.logoutUser = async function() { await signOut(auth); };
 
-        // --- CÓDIGO DE HORARIOS CORREGIDO ---
+        window.openModalProfile = async function() {
+            if (!window.currentUser) return;
+            const user = window.currentUser;
+            document.getElementById('profile-edit-name').value = user.displayName || '';
+            document.getElementById('profile-edit-photo').value = user.photoURL || '';
+
+            try {
+                const docSnap = await getDoc(doc(db, "users", user.uid));
+                if (docSnap.exists()) {
+                    document.getElementById('profile-edit-med').value = docSnap.data().patologias || '';
+                    document.getElementById('profile-edit-phone').value = docSnap.data().telefono || '';
+                }
+            } catch(e) { console.error(e); }
+
+            document.getElementById('modal-profile').classList.remove('hidden');
+        };
+
+        window.closeModalProfile = function() {
+            document.getElementById('modal-profile').classList.add('hidden');
+        };
+
+        window.guardarPerfilPaciente = async function(e) {
+            e.preventDefault();
+            const user = window.currentUser;
+            if(!user) return;
+
+            const name = document.getElementById('profile-edit-name').value;
+            const photo = document.getElementById('profile-edit-photo').value;
+            const patologias = document.getElementById('profile-edit-med').value;
+            const telefono = document.getElementById('profile-edit-phone').value;
+
+            try {
+                await updateProfile(user, {
+                    displayName: name,
+                    photoURL: photo || null
+                });
+
+                await setDoc(doc(db, "users", user.uid), {
+                    displayName: name,
+                    photoURL: photo || null,
+                    patologias: patologias,
+                    telefono: telefono,
+                    updatedAt: serverTimestamp()
+                }, { merge: true });
+
+                alert("¡Perfil e historial médico actualizados con éxito!");
+                window.closeModalProfile();
+                renderLoggedInUI(auth.currentUser);
+            } catch(error) {
+                alert("Error al actualizar perfil: " + error.message);
+            }
+        };
+
+        function actualizarEstadoConsultorio() {
+            const now = new Date();
+            const argTimeString = now.toLocaleString("en-US", { timeZone: "America/Argentina/Buenos_Aires" });
+            const argDate = new Date(argTimeString);
+            
+            const day = argDate.getDay();
+            const hour = argDate.getHours();
+            const minutes = argDate.getMinutes();
+            const timeInMinutes = hour * 60 + minutes;
+
+            const openMinutes = 9 * 60;
+            const closeMinutes = 19 * 60 + 30;
+
+            const badge = document.getElementById('consultorio-status-badge');
+            if(!badge) return;
+
+            const isWeekday = day >= 1 && day <= 5;
+            const isOpen = isWeekday && (timeInMinutes >= openMinutes && timeInMinutes < closeMinutes);
+
+            if (isOpen) {
+                badge.innerHTML = `
+                    <span class="inline-block w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse mr-1.5"></span>
+                    <span class="font-bold text-xs sm:text-sm">Consultorio Abierto</span>
+                    <span class="text-xs text-brand-200 hidden sm:inline ml-1">• Atendiendo ahora en Posadas & Online</span>
+                `;
+            } else {
+                let hoursToOpen = 0;
+                if (isWeekday && timeInMinutes < openMinutes) {
+                    hoursToOpen = Math.ceil((openMinutes - timeInMinutes) / 60);
+                } else if (isWeekday && timeInMinutes >= closeMinutes) {
+                    hoursToOpen = Math.ceil((24 * 60 - timeInMinutes + openMinutes) / 60);
+                } else if (day === 6) {
+                    hoursToOpen = Math.ceil((24 * 60 - timeInMinutes + 24 * 60 + openMinutes) / 60);
+                } else {
+                    hoursToOpen = Math.ceil((24 * 60 - timeInMinutes + openMinutes) / 60);
+                }
+
+                badge.innerHTML = `
+                    <span class="inline-block w-2.5 h-2.5 rounded-full bg-red-400 mr-1.5"></span>
+                    <span class="font-bold text-xs sm:text-sm">Consultorio Cerrado</span>
+                    <span class="text-xs text-brand-200 ml-1">• Abre en aprox. ${hoursToOpen} hs (Lunes a Viernes 09:00 a 19:30 ARG)</span>
+                `;
+            }
+        }
+
+        window.ofertaActiva = true;
+        window.tiempoRestanteSecs = 600;
+
+        window.planesData = {
+            'plan-descenso': {
+                nombre: 'Plan Descenso de Grasa & Salud Metabólica',
+                duracion: '4 semanas',
+                precioOferta: 19500,
+                precioRegular: 26000
+            },
+            'plan-musculo': {
+                nombre: 'Plan Recomposición Corporal & Fuerza',
+                duracion: '4 semanas',
+                precioOferta: 21000,
+                precioRegular: 28000
+            },
+            'plan-antiinf': {
+                nombre: 'Plan Antiinflamatorio & Salud Intestinal',
+                duracion: '3 semanas',
+                precioOferta: 18900,
+                precioRegular: 24500
+            }
+        };
+
+        window.selectedPlanKey = 'plan-descenso';
         window.selectedModalidad = "Presencial (Posadas)";
         window.selectedHora = null;
+
+        function iniciarTemporizadorOferta() {
+            const timerDisplay = document.getElementById('oferta-timer');
+            const interval = setInterval(() => {
+                if (window.tiempoRestanteSecs <= 0) {
+                    clearInterval(interval);
+                    window.ofertaActiva = false;
+                    if(timerDisplay) timerDisplay.innerText = "¡OFERTA EXPIRADA!";
+                    actualizarPreciosPlanesUI();
+                    actualizarCarritoUI();
+                } else {
+                    window.tiempoRestanteSecs--;
+                    const mins = Math.floor(window.tiempoRestanteSecs / 60);
+                    const secs = window.tiempoRestanteSecs % 60;
+                    if(timerDisplay) {
+                        timerDisplay.innerText = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+                    }
+                }
+            }, 1000);
+        }
+
+        function actualizarPreciosPlanesUI() {
+            Object.keys(window.planesData).forEach(key => {
+                const plan = window.planesData[key];
+                const card = document.getElementById(`card-${key}`);
+                if (!card) return;
+
+                const priceContainer = card.querySelector('.price-display-container');
+                if (priceContainer) {
+                    if (window.ofertaActiva) {
+                        priceContainer.innerHTML = `
+                            <span class="text-xs text-gray-400 line-through mr-1">$${plan.precioRegular.toLocaleString('es-AR')}</span>
+                            <span class="text-2xl font-black text-brand-800">$${plan.precioOferta.toLocaleString('es-AR')}</span>
+                            <span class="text-xs font-bold text-emerald-600 block">¡Ahorrás $${(plan.precioRegular - plan.precioOferta).toLocaleString('es-AR')} ARS!</span>
+                        `;
+                    } else {
+                        priceContainer.innerHTML = `
+                            <span class="text-2xl font-black text-gray-900">$${plan.precioRegular.toLocaleString('es-AR')} ARS</span>
+                            <span class="text-xs text-gray-500 block">Precio Regular sin oferta</span>
+                        `;
+                    }
+                }
+            });
+        }
+
+        window.selectPlan = function(key) {
+            window.selectedPlanKey = key;
+            document.querySelectorAll('.plan-card').forEach(c => {
+                c.classList.remove('border-brand-700', 'bg-brand-50/50', 'ring-2', 'ring-brand-700');
+                c.classList.add('border-gray-200');
+            });
+
+            const activeCard = document.getElementById(`card-${key}`);
+            if (activeCard) {
+                activeCard.classList.add('border-brand-700', 'bg-brand-50/50', 'ring-2', 'ring-brand-700');
+                activeCard.classList.remove('border-gray-200');
+            }
+
+            actualizarCarritoUI();
+        };
 
         window.selectModalidad = function(btn, mod) {
             document.querySelectorAll('.mod-btn').forEach(b => {
@@ -166,6 +374,15 @@
             btn.classList.add('border-brand-700', 'bg-brand-50', 'text-brand-900');
             btn.classList.remove('border-gray-200', 'text-gray-700');
             window.selectedModalidad = mod;
+
+            const globalBanner = document.getElementById('online-global-notice');
+            if (mod === 'Online (Video)') {
+                globalBanner.classList.remove('hidden');
+            } else {
+                globalBanner.classList.add('hidden');
+            }
+
+            actualizarCarritoUI();
         };
 
         window.selectHora = function(btn, hora) {
@@ -179,7 +396,28 @@
             btn.classList.add('bg-brand-700', 'text-white');
             btn.classList.remove('border-gray-300', 'text-gray-800');
             window.selectedHora = hora;
+
+            actualizarCarritoUI();
         };
+
+        function actualizarCarritoUI() {
+            const plan = window.planesData[window.selectedPlanKey];
+            if (!plan) return;
+
+            const fecha = document.getElementById('turno-fecha')?.value || 'Sin fecha';
+            const hora = window.selectedHora || 'Sin hora';
+
+            const precioFinal = window.ofertaActiva ? plan.precioOferta : plan.precioRegular;
+            const ahorro = window.ofertaActiva ? (plan.precioRegular - plan.precioOferta) : 0;
+
+            document.getElementById('cart-plan-name').innerText = plan.nombre;
+            document.getElementById('cart-plan-mod').innerText = `${window.selectedModalidad} • ${plan.duracion}`;
+            document.getElementById('cart-fecha-hora').innerText = `📅 ${fecha} a las ${hora}`;
+            
+            document.getElementById('cart-subtotal').innerText = `$${plan.precioRegular.toLocaleString('es-AR')} ARS`;
+            document.getElementById('cart-descuento').innerText = window.ofertaActiva ? `-$${ahorro.toLocaleString('es-AR')} ARS` : '$0 ARS';
+            document.getElementById('cart-total').innerText = `$${precioFinal.toLocaleString('es-AR')} ARS`;
+        }
 
         window.cargarHorariosDisponibles = async function(fecha) {
             const container = document.getElementById('horarios-container');
@@ -191,7 +429,7 @@
                 const querySnapshot = await getDocs(q);
                 turnosOcupados = querySnapshot.docs.map(doc => doc.data().hora);
             } catch(e) {
-                console.warn("Sin respuesta de Firestore o primera carga, generando mapa por defecto:", e);
+                console.warn("Cargando matriz de horarios:", e);
             }
 
             container.innerHTML = "";
@@ -210,31 +448,59 @@
                 }
                 container.appendChild(btn);
             });
+
+            actualizarCarritoUI();
         };
 
-        window.confirmarReserva = async function() {
+        window.confirmarYProcesarPago = async function() {
             if (!window.currentUser) {
                 alert("Debés iniciar sesión para confirmar tu reserva.");
                 window.openModalAuth();
                 return;
             }
             const fecha = document.getElementById('turno-fecha').value;
-            if (!fecha || !window.selectedHora) return alert("Seleccioná fecha y horario disponible.");
+            if (!fecha || !window.selectedHora) return alert("Por favor seleccioná fecha y horario para tu consulta.");
+
+            const plan = window.planesData[window.selectedPlanKey];
+            const precioFinal = window.ofertaActiva ? plan.precioOferta : plan.precioRegular;
 
             try {
-                await addDoc(collection(db, "turnos"), {
+                const docRef = await addDoc(collection(db, "turnos"), {
                     userId: window.currentUser.uid,
                     pacienteNombre: window.currentUser.displayName || window.currentUser.email,
+                    pacienteEmail: window.currentUser.email,
+                    planNombre: plan.nombre,
                     modalidad: window.selectedModalidad,
                     fecha: fecha,
                     hora: window.selectedHora,
+                    estadoPago: "modo_prueba_pendiente",
+                    monto: precioFinal,
                     createdAt: serverTimestamp()
                 });
-                alert(`¡Turno agendado con éxito para el ${fecha} a las ${window.selectedHora}!`);
+
+                alert(`[MODO PRUEBA - SANDBOX]\n\n¡Reserva generada con éxito!\n\nPlan: ${plan.nombre}\nFecha: ${fecha} a las ${window.selectedHora}\nMonto de prueba: $${precioFinal.toLocaleString('es-AR')} ARS.\n\nSimulación completada en el sistema. No se realizó ningún cargo real.`);
+                
                 window.cargarHorariosDisponibles(fecha);
             } catch(e) {
-                alert("Error al reservar: " + e.message);
+                alert("Error al procesar reserva: " + e.message);
             }
+        };
+
+        window.cargarPlanPaciente = async function(userId) {
+            const container = document.getElementById('plan-content-display');
+            try {
+                const docSnap = await getDoc(doc(db, "planes_nutricionales", userId));
+                if (docSnap.exists() && docSnap.data().plan) {
+                    container.innerHTML = `<div class="p-6 bg-sand rounded-2xl text-gray-800 text-sm leading-relaxed">${docSnap.data().plan}</div>`;
+                } else {
+                    container.innerHTML = `
+                        <div class="p-8 text-center bg-sand border border-brand-100 rounded-3xl space-y-3">
+                            <div class="w-12 h-12 bg-amber-100 text-amber-800 rounded-full flex items-center justify-center text-xl mx-auto"><i class="fa-solid fa-hourglass-half"></i></div>
+                            <h3 class="font-extrabold text-gray-900 text-base">Esperá que la nutricionista Pamela cargue tu plan</h3>
+                            <p class="text-xs text-gray-600 max-w-md mx-auto">El proceso de armado y carga de tu plan alimentario personalizado se realiza luego de asistir a tu consulta presencial u online.</p>
+                        </div>`;
+                }
+            } catch(e) { console.error(e); }
         };
 
         window.cargarFichaMedicaPaciente = async function(userId) {
@@ -264,7 +530,8 @@
                             <div class="flex justify-between items-center cursor-pointer" onclick="document.getElementById('det-${pId}').classList.toggle('hidden')">
                                 <div>
                                     <h4 class="font-bold text-gray-900 text-sm">${p.displayName || 'Paciente sin nombre'}</h4>
-                                    <span class="text-xs text-gray-500">${p.email}</span>
+                                    <span class="text-xs text-gray-500">${p.email} ${p.telefono ? '• Tel: ' + p.telefono : ''}</span>
+                                    ${p.patologias ? `<p class="text-[11px] text-red-600 font-semibold mt-0.5"><i class="fa-solid fa-notes-medical mr-1"></i> Afecciones: ${p.patologias}</p>` : ''}
                                 </div>
                                 <span class="text-xs px-2.5 py-1 bg-emerald-100 text-emerald-800 font-extrabold rounded-full">Activo</span>
                             </div>
@@ -277,7 +544,11 @@
                                     <input type="number" id="inp-mus-${pId}" placeholder="% Músculo" class="p-2 border border-gray-300 rounded-lg">
                                 </div>
                                 <textarea id="inp-obs-${pId}" placeholder="Observaciones médicas..." class="w-full p-2 border border-gray-300 rounded-lg"></textarea>
-                                <button onclick="window.guardarFichaPacienteNutri('${pId}')" class="bg-brand-700 text-white font-bold px-4 py-2 rounded-xl">Guardar Ficha</button>
+                                
+                                <p class="font-bold text-brand-800 pt-2">Cargar Plan Alimentario:</p>
+                                <textarea id="inp-plan-${pId}" placeholder="Detalles del plan, semanas, menúes..." class="w-full p-2 border border-gray-300 rounded-lg h-24"></textarea>
+
+                                <button onclick="window.guardarFichaYPlanNutri('${pId}')" class="bg-brand-700 text-white font-bold px-4 py-2 rounded-xl">Guardar Datos de Paciente</button>
                             </div>
                         </div>`;
                 });
@@ -285,23 +556,34 @@
             } catch(e) { console.error(e); }
         };
 
-        window.guardarFichaPacienteNutri = async function(pacienteId) {
+        window.guardarFichaYPlanNutri = async function(pacienteId) {
             const peso = document.getElementById(`inp-peso-${pacienteId}`).value;
             const altura = document.getElementById(`inp-alt-${pacienteId}`).value;
             const grasa = document.getElementById(`inp-gra-${pacienteId}`).value;
             const musculo = document.getElementById(`inp-mus-${pacienteId}`).value;
             const obs = document.getElementById(`inp-obs-${pacienteId}`).value;
+            const plan = document.getElementById(`inp-plan-${pacienteId}`).value;
 
             try {
-                await setDoc(doc(db, "fichas_medicas", pacienteId), {
-                    peso, altura, grasa, musculo, observaciones: obs, updatedAt: serverTimestamp()
-                }, { merge: true });
-                alert("¡Ficha antropométrica actualizada!");
+                if (peso || altura || grasa || musculo || obs) {
+                    await setDoc(doc(db, "fichas_medicas", pacienteId), {
+                        peso, altura, grasa, musculo, observaciones: obs, updatedAt: serverTimestamp()
+                    }, { merge: true });
+                }
+                if (plan) {
+                    await setDoc(doc(db, "planes_nutricionales", pacienteId), {
+                        plan, updatedAt: serverTimestamp()
+                    }, { merge: true });
+                }
+                alert("¡Ficha y Plan del paciente actualizados con éxito!");
             } catch(e) { alert("Error: " + e.message); }
         };
 
-        // Inicialización de Fecha al cargar la página
         window.addEventListener('DOMContentLoaded', () => {
+            actualizarEstadoConsultorio();
+            setInterval(actualizarEstadoConsultorio, 60000);
+            iniciarTemporizadorOferta();
+
             const today = new Date().toISOString().split('T')[0];
             const dateInput = document.getElementById('turno-fecha');
             if(dateInput) {
@@ -319,8 +601,21 @@
 </head>
 <body class="min-h-screen flex flex-col justify-between antialiased">
 
+    <!-- Top Status Bar -->
+    <div class="bg-brand-900 text-white py-2 px-4 border-b border-brand-800 text-xs sm:text-sm sticky top-0 z-40 shadow-sm">
+        <div class="max-w-7xl mx-auto flex justify-between items-center">
+            <div id="consultorio-status-badge" class="flex items-center space-x-1">
+                <span class="inline-block w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                <span class="font-bold">Consultorio Abierto</span>
+            </div>
+            <div class="text-[11px] text-brand-200 font-semibold hidden md:block">
+                Lunes a Viernes 09:00 a 19:30 hs (ARG)
+            </div>
+        </div>
+    </div>
+
     <!-- Navbar -->
-    <header class="bg-white border-b border-gray-200 sticky top-0 z-30 shadow-sm">
+    <header class="bg-white border-b border-gray-200 sticky top-[33px] z-30 shadow-sm">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div class="flex justify-between h-20 items-center">
                 
@@ -328,7 +623,7 @@
                     <div class="w-12 h-12 rounded-2xl bg-brand-100 flex items-center justify-center text-brand-800 font-black text-2xl">🌱</div>
                     <div>
                         <span class="text-xl font-extrabold text-gray-900 leading-tight block">Nutrición Pam</span>
-                        <span class="text-xs text-brand-700 font-semibold block">Dra. Pamela Lagardo</span>
+                        <span class="text-xs text-brand-700 font-semibold block">Dra. Pamela Lagardo • MP-710</span>
                     </div>
                 </div>
 
@@ -337,7 +632,7 @@
                         <i class="fa-solid fa-house"></i><span>Inicio</span>
                     </button>
                     <button onclick="switchMainTab('turnos')" data-tab="turnos" class="nav-btn px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition text-gray-600 hover:text-brand-800">
-                        <i class="fa-solid fa-calendar-plus"></i><span>Agendar Turno</span>
+                        <i class="fa-solid fa-calendar-plus"></i><span>Elegir Plan & Turno</span>
                     </button>
                     <button onclick="switchMainTab('tienda')" data-tab="tienda" class="nav-btn px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition text-gray-600 hover:text-brand-800">
                         <i class="fa-solid fa-store"></i><span>Tienda Saludable</span>
@@ -358,13 +653,15 @@
                         <i class="fa-solid fa-user"></i> <span>Ingresar / Registrarse</span>
                     </button>
 
-                    <div id="auth-badge" class="hidden flex items-center space-x-3 bg-brand-50 border border-brand-100 p-1.5 pr-4 rounded-full">
-                        <div class="w-9 h-9 rounded-full bg-brand-700 text-white flex items-center justify-center font-bold text-sm">PL</div>
+                    <div id="auth-badge" class="hidden flex items-center space-x-3 bg-brand-50 border border-brand-100 p-1.5 pr-4 rounded-full cursor-pointer hover:bg-brand-100/60 transition" onclick="openModalProfile()" title="Hacé clic para editar tu perfil o patologías">
+                        <div id="user-avatar-container" class="w-9 h-9 rounded-full bg-brand-700 text-white flex items-center justify-center font-bold text-sm shadow">
+                            PL
+                        </div>
                         <div class="text-left">
                             <span id="user-display-name" class="block text-xs font-extrabold text-gray-900 leading-none">Usuario</span>
-                            <span id="user-role-tag" class="text-[11px] text-brand-700 font-semibold">Paciente</span>
+                            <span id="user-role-tag" class="text-[11px] text-brand-700 font-semibold">Editar Perfil <i class="fa-solid fa-pen text-[9px] ml-0.5"></i></span>
                         </div>
-                        <button onclick="logoutUser()" class="p-1 text-gray-400 hover:text-red-600 ml-2">
+                        <button onclick="event.stopPropagation(); logoutUser();" class="p-1 text-gray-400 hover:text-red-600 ml-2" title="Cerrar sesión">
                             <i class="fa-solid fa-right-from-bracket"></i>
                         </button>
                     </div>
@@ -375,15 +672,14 @@
 
     <main class="flex-grow max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
         
-        <!-- PESTAÑA: PANEL PRINCIPAL (INICIO) -->
-        <section id="tab-dashboard" class="tab-content active space-y-8">
+        <!-- PESTAÑA: PANEL PRINCIPAL -->
+        <section id="tab-dashboard" class="tab-content active space-y-12">
             
-            <!-- VISTA INVITADO (OFFLINE / SIN SESIÓN) -->
             <div id="hero-guest" class="bg-gradient-to-r from-brand-800 to-brand-900 rounded-3xl p-8 sm:p-12 text-white shadow-lg space-y-6">
                 <div class="max-w-2xl space-y-3">
-                    <span class="bg-brand-700 text-brand-100 text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider">Consultorio Abierto • Posadas, Misiones</span>
+                    <span class="bg-brand-700 text-brand-100 text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider">Lic. en Nutrición • MP-710</span>
                     <h1 class="text-3xl sm:text-5xl font-black leading-tight">¡Iniciá sesión y pedí un turno ya mismo!</h1>
-                    <p class="text-brand-100 text-sm sm:text-base">Especialista en nutrición deportiva, clínica e integral. Agendá tu consulta presencial u online en simples pasos.</p>
+                    <p class="text-brand-100 text-sm sm:text-base">Especialista en composición corporal, salud digestiva y diabetes. Atención presencial en Posadas y online para todo el mundo.</p>
                 </div>
                 <div class="flex flex-wrap gap-3">
                     <button onclick="switchMainTab('turnos')" class="bg-white text-brand-900 font-extrabold px-6 py-3.5 rounded-2xl text-sm hover:bg-brand-50 transition shadow">
@@ -395,13 +691,19 @@
                 </div>
             </div>
 
-            <!-- VISTA USUARIO LOGUEADO -->
             <div id="hero-user" class="hidden bg-gradient-to-r from-brand-800 to-brand-900 rounded-3xl p-8 text-white shadow-lg space-y-3">
-                <h1 class="text-3xl font-extrabold">¡Hola, <span id="welcome-user-name">Paciente</span>! 👋</h1>
-                <p class="text-brand-100 text-sm">Bienvenido a tu portal de nutrición y salud personalizada.</p>
+                <div class="flex justify-between items-center">
+                    <div>
+                        <h1 class="text-3xl font-extrabold">¡Hola, <span id="welcome-user-name">Paciente</span>! 👋</h1>
+                        <p class="text-brand-100 text-sm">Bienvenido a tu portal de nutrición y salud personalizada.</p>
+                    </div>
+                    <button onclick="openModalProfile()" class="bg-white/20 hover:bg-white/30 text-white px-4 py-2 rounded-2xl text-xs font-bold transition flex items-center space-x-2">
+                        <i class="fa-solid fa-user-pen"></i>
+                        <span>Mi Perfil & Salud</span>
+                    </button>
+                </div>
             </div>
 
-            <!-- SECCIÓN DE SERVICIOS Y TIENDA EN EL INICIO -->
             <div class="space-y-4">
                 <h3 class="text-xl font-extrabold text-gray-900">Servicios & Programas Disponibles</h3>
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -413,8 +715,8 @@
                     </div>
                     <div class="bg-white border border-gray-200 rounded-3xl p-6 shadow-sm space-y-3">
                         <div class="w-12 h-12 bg-blue-100 text-blue-800 rounded-2xl flex items-center justify-center text-xl font-bold">💻</div>
-                        <h4 class="font-extrabold text-gray-900">Atención Online</h4>
-                        <p class="text-xs text-gray-600">Videoconsulta personalizada con seguimiento semanal directo vía WhatsApp desde cualquier lugar.</p>
+                        <h4 class="font-extrabold text-gray-900">Atención Online Global</h4>
+                        <p class="text-xs text-gray-600">Videoconsulta personalizada en español/inglés con seguimiento semanal directo vía WhatsApp.</p>
                         <button onclick="switchMainTab('turnos')" class="text-xs font-bold text-brand-700 hover:underline">Solicitar Turno &rarr;</button>
                     </div>
                     <div class="bg-white border border-gray-200 rounded-3xl p-6 shadow-sm space-y-3">
@@ -425,66 +727,180 @@
                     </div>
                 </div>
             </div>
-        </section>
 
-        <!-- PESTAÑA: AGENDAR TURNO -->
-        <section id="tab-turnos" class="tab-content space-y-6">
-            <div class="bg-white border border-gray-200 rounded-3xl p-6 sm:p-8 shadow-sm">
-                <h2 class="text-2xl font-extrabold text-gray-900 mb-1">Agendá tu Turno Nutricional</h2>
-                <p class="text-xs text-gray-600 mb-6">Seleccioná la modalidad y la fecha. Los horarios marcados con una X roja ya no tienen disponibilidad.</p>
-                
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div class="space-y-4">
-                        <div>
-                            <label class="block text-xs font-bold text-gray-700 uppercase mb-2">1. Modalidad</label>
-                            <div class="grid grid-cols-2 gap-3">
-                                <button onclick="window.selectModalidad(this, 'Presencial (Posadas)')" class="mod-btn border-2 border-brand-700 bg-brand-50 p-4 rounded-2xl text-left font-bold text-brand-900 text-sm">
-                                    <i class="fa-solid fa-user-doctor text-brand-700 block text-lg mb-1"></i> Presencial (Posadas)
-                                </button>
-                                <button onclick="window.selectModalidad(this, 'Online (Video)')" class="mod-btn border-2 border-gray-200 p-4 rounded-2xl text-left font-bold text-gray-700 text-sm">
-                                    <i class="fa-solid fa-laptop text-gray-500 block text-lg mb-1"></i> Online (Video)
-                                </button>
-                            </div>
-                        </div>
-                        <div>
-                            <label class="block text-xs font-bold text-gray-700 uppercase mb-2">2. Seleccionar Fecha</label>
-                            <input type="date" id="turno-fecha" onchange="window.cargarHorariosDisponibles(this.value)" class="w-full p-3.5 rounded-2xl border border-gray-300 bg-sand text-sm font-semibold text-gray-800">
-                        </div>
+            <div class="bg-white border border-gray-200 rounded-3xl p-8 shadow-sm space-y-6">
+                <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-6 pb-6 border-b border-gray-100">
+                    <div class="space-y-2 max-w-2xl">
+                        <span class="text-xs font-bold text-brand-700 uppercase tracking-wider">Sobre Mi Trayectoria Profesional</span>
+                        <h2 class="text-2xl sm:text-3xl font-black text-gray-900">Lic. Pamela Lagardo</h2>
+                        <p class="text-xs sm:text-sm text-gray-600 leading-relaxed">
+                            Soy la Lic. Pamela Lagardo, apasionada por transformar la relación que las personas tienen con su alimentación. A lo largo de más de 8 años de práctica clínica y docencia nutricional, he acompañado a más de 1.500 personas a alcanzar sus objetivos de salud, composición corporal y vitalidad. Mi enfoque combina evidencia científica actualizada, personalización absoluta a través de la plataforma KiwiPam y herramientas prácticas de Meal Prep y recetarios deliciosos.
+                        </p>
                     </div>
+                    <div class="w-20 h-20 rounded-2xl bg-brand-100 text-brand-800 flex items-center justify-center font-black text-3xl shrink-0">
+                        🌱
+                    </div>
+                </div>
 
-                    <div class="space-y-4">
-                        <label class="block text-xs font-bold text-gray-700 uppercase">3. Horarios Disponibles</label>
-                        <div id="horarios-container" class="grid grid-cols-3 gap-2"></div>
-                        <button onclick="window.confirmarReserva()" class="w-full mt-4 bg-brand-700 hover:bg-brand-800 text-white font-extrabold py-3.5 px-4 rounded-2xl transition text-sm shadow">
-                            Confirmar y Reservar Turno
-                        </button>
+                <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 pt-2">
+                    <div class="p-4 bg-sand border border-brand-100 rounded-2xl space-y-1">
+                        <i class="fa-solid fa-user-graduate text-brand-700 text-lg mb-1"></i>
+                        <h4 class="font-extrabold text-gray-900 text-xs">Lic. en Nutrición</h4>
+                        <p class="text-[11px] text-gray-500">Matrícula Profesional MP-710</p>
+                    </div>
+                    <div class="p-4 bg-sand border border-brand-100 rounded-2xl space-y-1">
+                        <i class="fa-solid fa-ruler-horizontal text-brand-700 text-lg mb-1"></i>
+                        <h4 class="font-extrabold text-gray-900 text-xs">Antropometrista ISAK 1</h4>
+                        <p class="text-[11px] text-gray-500">Evaluación de Composición Corporal</p>
+                    </div>
+                    <div class="p-4 bg-sand border border-brand-100 rounded-2xl space-y-1">
+                        <i class="fa-solid fa-stethoscope text-brand-700 text-lg mb-1"></i>
+                        <h4 class="font-extrabold text-gray-900 text-xs">Patologías Digestivas</h4>
+                        <p class="text-[11px] text-gray-500">Posgrado en Microbiota Intestinal</p>
+                    </div>
+                    <div class="p-4 bg-sand border border-brand-100 rounded-2xl space-y-1">
+                        <i class="fa-solid fa-heart-pulse text-brand-700 text-lg mb-1"></i>
+                        <h4 class="font-extrabold text-gray-900 text-xs">Atención en Diabetes</h4>
+                        <p class="text-[11px] text-gray-500">Posgrado Adultos y Niños</p>
                     </div>
                 </div>
             </div>
+
+            <div class="space-y-6">
+                <div class="text-center max-w-xl mx-auto space-y-1">
+                    <span class="text-xs font-bold text-brand-700 uppercase tracking-wider">Casos Reales</span>
+                    <h2 class="text-2xl font-extrabold text-gray-900">Testimonios de Pacientes</h2>
+                    <p class="text-xs text-gray-500">Historias de superación, salud y cambio de hábitos reales.</p>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
+                    <div class="bg-white border border-gray-200 rounded-3xl p-5 shadow-sm space-y-3 flex flex-col justify-between">
+                        <div class="space-y-2">
+                            <div class="flex text-amber-400 text-xs"><i class="fa-solid fa-star"></i><i class="fa-solid fa-star"></i><i class="fa-solid fa-star"></i><i class="fa-solid fa-star"></i><i class="fa-solid fa-star"></i></div>
+                            <p class="text-xs text-gray-600 italic">"Gané 4kg de masa muscular para mis entrenamientos sin sentirme pesado ni inflamado. Pamela me ordenó los horarios."</p>
+                        </div>
+                        <div class="pt-2 border-t border-gray-100">
+                            <span class="block font-bold text-gray-900 text-xs">Martín R.</span>
+                            <span class="text-[10px] text-brand-700 font-semibold">Rendimiento Deportivo</span>
+                        </div>
+                    </div>
+
+                    <div class="bg-white border border-gray-200 rounded-3xl p-5 shadow-sm space-y-3 flex flex-col justify-between">
+                        <div class="space-y-2">
+                            <div class="flex text-amber-400 text-xs"><i class="fa-solid fa-star"></i><i class="fa-solid fa-star"></i><i class="fa-solid fa-star"></i><i class="fa-solid fa-star"></i><i class="fa-solid fa-star"></i></div>
+                            <p class="text-xs text-gray-600 italic">"Su abordaje de microbiota cambió mi inflamación crónica en pocas semanas. Volví a disfrutar de comer tranquilo."</p>
+                        </div>
+                        <div class="pt-2 border-t border-gray-100">
+                            <span class="block font-bold text-gray-900 text-xs">Carolina M.</span>
+                            <span class="text-[10px] text-brand-700 font-semibold">Salud Digestiva</span>
+                        </div>
+                    </div>
+
+                    <div class="bg-white border border-gray-200 rounded-3xl p-5 shadow-sm space-y-3 flex flex-col justify-between">
+                        <div class="space-y-2">
+                            <div class="flex text-amber-400 text-xs"><i class="fa-solid fa-star"></i><i class="fa-solid fa-star"></i><i class="fa-solid fa-star"></i><i class="fa-solid fa-star"></i><i class="fa-solid fa-star"></i></div>
+                            <p class="text-xs text-gray-600 italic">"Logramos estabilizar mis glucemias con el plan de diabetes sin restricciones absurdas. Muy clara y profesional."</p>
+                        </div>
+                        <div class="pt-2 border-t border-gray-100">
+                            <span class="block font-bold text-gray-900 text-xs">Jorge S.</span>
+                            <span class="text-[10px] text-brand-700 font-semibold">Manejo de Diabetes</span>
+                        </div>
+                    </div>
+
+                    <div class="bg-white border border-gray-200 rounded-3xl p-5 shadow-sm space-y-3 flex flex-col justify-between">
+                        <div class="space-y-2">
+                            <div class="flex text-amber-400 text-xs"><i class="fa-solid fa-star"></i><i class="fa-solid fa-star"></i><i class="fa-solid fa-star"></i><i class="fa-solid fa-star"></i><i class="fa-solid fa-star"></i></div>
+                            <p class="text-xs text-gray-600 italic">"Atendiéndome de manera online desde España sentí una cercanía tremenda. Los recetarios son fáciles de seguir."</p>
+                        </div>
+                        <div class="pt-2 border-t border-gray-100">
+                            <span class="block font-bold text-gray-900 text-xs">Lucía B.</span>
+                            <span class="text-[10px] text-brand-700 font-semibold">Consulta Online Internacional</span>
+                        </div>
+                    </div>
+
+                    <div class="bg-white border border-gray-200 rounded-3xl p-5 shadow-sm space-y-3 flex flex-col justify-between">
+                        <div class="space-y-2">
+                            <div class="flex text-amber-400 text-xs"><i class="fa-solid fa-star"></i><i class="fa-solid fa-star"></i><i class="fa-solid fa-star"></i><i class="fa-solid fa-star"></i><i class="fa-solid fa-star"></i></div>
+                            <p class="text-xs text-gray-600 italic">"Bajé de peso progresivamente sin pasar hambre y aprendí a organizar las comidas de toda mi familia."</p>
+                        </div>
+                        <div class="pt-2 border-t border-gray-100">
+                            <span class="block font-bold text-gray-900 text-xs">Valeria G.</span>
+                            <span class="text-[10px] text-brand-700 font-semibold">Composición Corporal</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
         </section>
 
-        <!-- PESTAÑA: TIENDA -->
-        <section id="tab-tienda" class="tab-content space-y-6">
-            <h2 class="text-2xl font-extrabold text-gray-900">Tienda Saludable & Ebooks</h2>
-            <div class="grid grid-cols-1 sm:grid-cols-3 gap-6">
-                <div class="bg-white border border-gray-200 rounded-3xl p-5 shadow-sm space-y-2">
-                    <div class="h-32 bg-sand rounded-2xl flex items-center justify-center text-4xl">📚</div>
-                    <h3 class="font-extrabold text-gray-900">Recetario Digital Antiinflamatorio</h3>
-                    <p class="text-xs text-gray-500">Más de 40 recetas prácticas explicadas paso a paso.</p>
-                    <span class="font-black text-brand-800 block pt-2">$3.500</span>
+        <!-- PESTAÑA: MI PLAN -->
+        <section id="tab-plan" class="tab-content space-y-6">
+            <div id="plan-offline-card" class="bg-white border border-gray-200 rounded-3xl p-8 shadow-sm space-y-6 text-center">
+                <div class="max-w-xl mx-auto space-y-3">
+                    <div class="w-16 h-16 bg-brand-50 text-brand-700 rounded-full flex items-center justify-center text-2xl mx-auto">
+                        <i class="fa-solid fa-lock"></i>
+                    </div>
+                    <h2 class="text-2xl font-extrabold text-gray-900">Iniciá sesión y accedé a tus datos de plan</h2>
+                    <p class="text-xs text-gray-600">Tu plan alimentario 100% personalizado es accesible desde cualquier dispositivo una vez que formes parte de nuestra comunidad de pacientes.</p>
+                    <button onclick="openModalAuth()" class="bg-brand-700 hover:bg-brand-800 text-white font-extrabold px-6 py-3 rounded-2xl text-xs transition shadow inline-block">
+                        Iniciar Sesión / Registrarse
+                    </button>
                 </div>
-                <div class="bg-white border border-gray-200 rounded-3xl p-5 shadow-sm space-y-2">
-                    <div class="h-32 bg-sand rounded-2xl flex items-center justify-center text-4xl">🧉</div>
-                    <h3 class="font-extrabold text-gray-900">Yerba Mate Orgánica YASY</h3>
-                    <p class="text-xs text-gray-500">Yerba mate especial seleccionada, sin polvillo, origen Misiones.</p>
-                    <span class="font-black text-brand-800 block pt-2">$4.500</span>
+
+                <hr class="border-gray-200">
+
+                <div class="text-left space-y-4 pt-2">
+                    <h3 class="text-lg font-extrabold text-gray-900 flex items-center space-x-2">
+                        <i class="fa-solid fa-circle-question text-brand-700"></i>
+                        <span>¿Qué puedo ver en mi plan?</span>
+                    </h3>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+                        <div class="p-4 bg-sand rounded-2xl space-y-1">
+                            <span class="text-lg">🥗</span>
+                            <h4 class="font-bold text-gray-900 text-xs">Menú Semanal Personalizado</h4>
+                            <p class="text-[11px] text-gray-500">Distribución clara de desayunos, almuerzos, meriendas y cenas adaptadas a tu rutina.</p>
+                        </div>
+                        <div class="p-4 bg-sand rounded-2xl space-y-1">
+                            <span class="text-lg">📖</span>
+                            <h4 class="font-bold text-gray-900 text-xs">Recetario & Reemplazos</h4>
+                            <p class="text-[11px] text-gray-500">Opciones flexibles para intercambiar alimentos sin salirte de tus metas nutricionales.</p>
+                        </div>
+                        <div class="p-4 bg-sand rounded-2xl space-y-1">
+                            <span class="text-lg">🛒</span>
+                            <h4 class="font-bold text-gray-900 text-xs">Lista de Compras Inteligente</h4>
+                            <p class="text-[11px] text-gray-500">Guía práctica con marcas recomendadas e ingredientes de tu zona para facilitar tus compras.</p>
+                        </div>
+                        <div class="p-4 bg-sand rounded-2xl space-y-1">
+                            <span class="text-lg">💡</span>
+                            <h4 class="font-bold text-gray-900 text-xs">Recomendaciones & Hábitos</h4>
+                            <p class="text-[11px] text-gray-500">Tips de hidratación, descanso y suplementación indicados especialmente para vos.</p>
+                        </div>
+                    </div>
                 </div>
+            </div>
+
+            <div id="plan-online-card" class="hidden bg-white border border-gray-200 rounded-3xl p-6 shadow-sm space-y-4">
+                <h2 class="text-2xl font-extrabold text-gray-900">Mi Plan Alimentario</h2>
+                <div id="plan-content-display"></div>
             </div>
         </section>
 
-        <!-- PESTAÑA: FICHA MÉDICA PACIENTE -->
+        <!-- PESTAÑA: FICHA MÉDICA -->
         <section id="tab-ficha" class="tab-content space-y-6">
-            <div class="bg-white border border-gray-200 rounded-3xl p-6 shadow-sm space-y-4">
+            <div id="ficha-offline-card" class="bg-white border border-gray-200 rounded-3xl p-8 shadow-sm space-y-4 text-center">
+                <div class="max-w-md mx-auto space-y-3">
+                    <div class="w-16 h-16 bg-brand-50 text-brand-700 rounded-full flex items-center justify-center text-2xl mx-auto">
+                        <i class="fa-solid fa-id-card"></i>
+                    </div>
+                    <h2 class="text-2xl font-extrabold text-gray-900">Iniciá sesión y accedé a tu ficha médica</h2>
+                    <p class="text-xs text-gray-600">Consultá tu evolución antropométrica, porcentaje de grasa, masa muscular y observaciones médicas en cada control.</p>
+                    <button onclick="openModalAuth()" class="bg-brand-700 hover:bg-brand-800 text-white font-extrabold px-6 py-3 rounded-2xl text-xs transition shadow inline-block">
+                        Iniciar Sesión / Registrarse
+                    </button>
+                </div>
+            </div>
+
+            <div id="ficha-online-card" class="hidden bg-white border border-gray-200 rounded-3xl p-6 shadow-sm space-y-4">
                 <h2 class="text-2xl font-extrabold text-gray-900">Mi Ficha Médica & Antropometría</h2>
                 <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
                     <div class="p-4 bg-sand rounded-2xl text-center">
@@ -511,6 +927,248 @@
             </div>
         </section>
 
+        <!-- PESTAÑA: ELEGIR PLAN & AGENDAR TURNO -->
+        <section id="tab-turnos" class="tab-content space-y-8">
+            
+            <!-- Banner de Oferta Flash con Temporizador (10 minutos) -->
+            <div id="oferta-banner" class="bg-gradient-to-r from-red-600 via-amber-600 to-red-700 text-white rounded-3xl p-5 shadow-lg flex flex-col sm:flex-row items-center justify-between gap-4">
+                <div class="flex items-center space-x-3">
+                    <div class="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center text-2xl font-black shrink-0">🔥</div>
+                    <div>
+                        <span class="bg-white/20 text-white text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider">¡Descuento Exclusivo por Tiempo Limitado!</span>
+                        <h3 class="text-lg font-extrabold leading-snug">Elegí tu Plan Nutricional con Precio Promocional</h3>
+                    </div>
+                </div>
+                <div class="bg-black/30 backdrop-blur-sm px-5 py-2.5 rounded-2xl text-center border border-white/20 shrink-0">
+                    <span class="text-[10px] uppercase font-bold text-amber-200 block">La oferta expira en:</span>
+                    <span id="oferta-timer" class="text-2xl font-black tracking-widest text-white font-mono">10:00</span>
+                </div>
+            </div>
+
+            <!-- PASO 1: SELECCIONAR PLAN NUTRICIONAL -->
+            <div class="space-y-4">
+                <div class="flex items-center space-x-2">
+                    <span class="w-7 h-7 rounded-full bg-brand-700 text-white font-black text-xs flex items-center justify-center">1</span>
+                    <h2 class="text-xl font-extrabold text-gray-900">Elegí tu Plan Nutricional Específico</h2>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    
+                    <!-- PLAN 1 -->
+                    <div id="card-plan-descenso" onclick="selectPlan('plan-descenso')" class="plan-card border-2 border-brand-700 bg-brand-50/50 ring-2 ring-brand-700 rounded-3xl p-6 transition cursor-pointer relative shadow-sm flex flex-col justify-between">
+                        <div class="space-y-4">
+                            <div class="flex justify-between items-start">
+                                <span class="bg-amber-100 text-amber-900 text-[11px] font-extrabold px-3 py-1 rounded-full">🔥 ~1750 kcal/día</span>
+                                <span class="text-xs font-bold text-gray-500"><i class="fa-solid fa-clock mr-1"></i>4 semanas</span>
+                            </div>
+                            <div>
+                                <h3 class="font-extrabold text-gray-900 text-lg">Descenso de Grasa & Salud Metabólica</h3>
+                                <p class="text-xs text-gray-600 mt-1">Diseñado para optimizar la pérdida de masa grasa preservando el 100% del tejido muscular con acceso a KiwiPam.</p>
+                            </div>
+
+                            <div class="grid grid-cols-3 gap-2 text-center bg-white p-3 rounded-2xl border border-gray-200">
+                                <div><span class="block text-[10px] text-gray-400 uppercase font-bold">Proteína</span><span class="font-black text-xs text-gray-800">135g</span></div>
+                                <div><span class="block text-[10px] text-gray-400 uppercase font-bold">Carbos</span><span class="font-black text-xs text-gray-800">160g</span></div>
+                                <div><span class="block text-[10px] text-gray-400 uppercase font-bold">Grasas</span><span class="font-black text-xs text-gray-800">55g</span></div>
+                            </div>
+
+                            <ul class="text-xs text-gray-600 space-y-1.5 pt-1">
+                                <li><i class="fa-solid fa-check text-emerald-600 mr-2"></i>Menú completo de 28 días (4 comidas)</li>
+                                <li><i class="fa-solid fa-check text-emerald-600 mr-2"></i>Cálculo exacto de calorías y macros</li>
+                                <li><i class="fa-solid fa-check text-emerald-600 mr-2"></i>Lista de compras semanal clasificada</li>
+                            </ul>
+                        </div>
+
+                        <div class="pt-6 border-t border-gray-200 mt-6 price-display-container">
+                            <span class="text-xs text-gray-400 line-through mr-1">$26.000</span>
+                            <span class="text-2xl font-black text-brand-800">$19.500</span>
+                            <span class="text-xs font-bold text-emerald-600 block">¡Ahorrás $6.500 ARS!</span>
+                        </div>
+                    </div>
+
+                    <!-- PLAN 2 -->
+                    <div id="card-plan-musculo" onclick="selectPlan('plan-musculo')" class="plan-card border-2 border-gray-200 bg-white rounded-3xl p-6 transition cursor-pointer relative shadow-sm flex flex-col justify-between hover:border-brand-600">
+                        <div class="space-y-4">
+                            <div class="flex justify-between items-start">
+                                <span class="bg-blue-100 text-blue-900 text-[11px] font-extrabold px-3 py-1 rounded-full">🔥 ~2350 kcal/día</span>
+                                <span class="text-xs font-bold text-gray-500"><i class="fa-solid fa-clock mr-1"></i>4 semanas</span>
+                            </div>
+                            <div>
+                                <h3 class="font-extrabold text-gray-900 text-lg">Recomposición Corporal & Fuerza</h3>
+                                <p class="text-xs text-gray-600 mt-1">Formulado para ganar masa muscular magra sin acumular grasa excesiva. Incluye protocolo pre/post entreno.</p>
+                            </div>
+
+                            <div class="grid grid-cols-3 gap-2 text-center bg-sand p-3 rounded-2xl border border-gray-200">
+                                <div><span class="block text-[10px] text-gray-400 uppercase font-bold">Proteína</span><span class="font-black text-xs text-gray-800">165g</span></div>
+                                <div><span class="block text-[10px] text-gray-400 uppercase font-bold">Carbos</span><span class="font-black text-xs text-gray-800">275g</span></div>
+                                <div><span class="block text-[10px] text-gray-400 uppercase font-bold">Grasas</span><span class="font-black text-xs text-gray-800">65g</span></div>
+                            </div>
+
+                            <ul class="text-xs text-gray-600 space-y-1.5 pt-1">
+                                <li><i class="fa-solid fa-check text-emerald-600 mr-2"></i>Timing nutricional entreno/descanso</li>
+                                <li><i class="fa-solid fa-check text-emerald-600 mr-2"></i>Densidad proteica de alto valor biológico</li>
+                                <li><i class="fa-solid fa-check text-emerald-600 mr-2"></i>Estrategias de reposición de glucógeno</li>
+                            </ul>
+                        </div>
+
+                        <div class="pt-6 border-t border-gray-200 mt-6 price-display-container">
+                            <span class="text-xs text-gray-400 line-through mr-1">$28.000</span>
+                            <span class="text-2xl font-black text-brand-800">$21.000</span>
+                            <span class="text-xs font-bold text-emerald-600 block">¡Ahorrás $7.000 ARS!</span>
+                        </div>
+                    </div>
+
+                    <!-- PLAN 3 -->
+                    <div id="card-plan-antiinf" onclick="selectPlan('plan-antiinf')" class="plan-card border-2 border-gray-200 bg-white rounded-3xl p-6 transition cursor-pointer relative shadow-sm flex flex-col justify-between hover:border-brand-600">
+                        <div class="space-y-4">
+                            <div class="flex justify-between items-start">
+                                <span class="bg-emerald-100 text-emerald-900 text-[11px] font-extrabold px-3 py-1 rounded-full">🔥 ~1850 kcal/día</span>
+                                <span class="text-xs font-bold text-gray-500"><i class="fa-solid fa-clock mr-1"></i>3 semanas</span>
+                            </div>
+                            <div>
+                                <h3 class="font-extrabold text-gray-900 text-lg">Antiinflamatorio & Salud Intestinal</h3>
+                                <p class="text-xs text-gray-600 mt-1">Enfocado en reducir la inflamación sistémica, regular el tránsito intestinal y erradicar la distensión.</p>
+                            </div>
+
+                            <div class="grid grid-cols-3 gap-2 text-center bg-sand p-3 rounded-2xl border border-gray-200">
+                                <div><span class="block text-[10px] text-gray-400 uppercase font-bold">Proteína</span><span class="font-black text-xs text-gray-800">120g</span></div>
+                                <div><span class="block text-[10px] text-gray-400 uppercase font-bold">Carbos</span><span class="font-black text-xs text-gray-800">180g</span></div>
+                                <div><span class="block text-[10px] text-gray-400 uppercase font-bold">Grasas</span><span class="font-black text-xs text-gray-800">68g</span></div>
+                            </div>
+
+                            <ul class="text-xs text-gray-600 space-y-1.5 pt-1">
+                                <li><i class="fa-solid fa-check text-emerald-600 mr-2"></i>Exclusión temporal de alimentos pro-inflamatorios</li>
+                                <li><i class="fa-solid fa-check text-emerald-600 mr-2"></i>Caldo de huesos, fermentos y glutamina</li>
+                                <li><i class="fa-solid fa-check text-emerald-600 mr-2"></i>Guía de reintroducción progresiva</li>
+                            </ul>
+                        </div>
+
+                        <div class="pt-6 border-t border-gray-200 mt-6 price-display-container">
+                            <span class="text-xs text-gray-400 line-through mr-1">$24.500</span>
+                            <span class="text-2xl font-black text-brand-800">$18.900</span>
+                            <span class="text-xs font-bold text-emerald-600 block">¡Ahorrás $5.600 ARS!</span>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+            <!-- PASO 2 Y CARRITO DE COMPRA -->
+            <div class="bg-white border border-gray-200 rounded-3xl p-6 sm:p-8 shadow-sm">
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                    
+                    <!-- DERECHA: SELECCIÓN DE MODALIDAD Y FECHA -->
+                    <div class="lg:col-span-2 space-y-6">
+                        <div class="flex items-center space-x-2">
+                            <span class="w-7 h-7 rounded-full bg-brand-700 text-white font-black text-xs flex items-center justify-center">2</span>
+                            <h2 class="text-xl font-extrabold text-gray-900">Seleccioná Modalidad y Fecha de la Consulta</h2>
+                        </div>
+
+                        <div id="online-global-notice" class="hidden bg-blue-50 border border-blue-200 rounded-2xl p-4 space-y-2">
+                            <div class="flex items-center space-x-2 text-blue-900 font-bold text-xs sm:text-sm">
+                                <i class="fa-solid fa-earth-americas text-blue-600 text-base"></i>
+                                <span>Atención Online Internacional • Global Consultation (Español / English)</span>
+                            </div>
+                            <p class="text-xs text-blue-800 leading-relaxed">
+                                🇦🇷 <strong>Español:</strong> No importa de qué parte del mundo seas, la consulta se realiza con la misma calidad y acompañamiento. Por favor, verificá la disponibilidad previa en el calendario interactivo. <br>
+                                🌍 <strong>English:</strong> Consultations are available worldwide in both Spanish and English.
+                            </p>
+                        </div>
+
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                            <div>
+                                <label class="block text-xs font-bold text-gray-700 uppercase mb-2">Modalidad de Consulta</label>
+                                <div class="grid grid-cols-2 gap-3">
+                                    <button onclick="window.selectModalidad(this, 'Presencial (Posadas)')" class="mod-btn border-2 border-brand-700 bg-brand-50 p-4 rounded-2xl text-left font-bold text-brand-900 text-xs">
+                                        <i class="fa-solid fa-user-doctor text-brand-700 block text-lg mb-1"></i> Presencial (Posadas)
+                                    </button>
+                                    <button onclick="window.selectModalidad(this, 'Online (Video)')" class="mod-btn border-2 border-gray-200 p-4 rounded-2xl text-left font-bold text-gray-700 text-xs">
+                                        <i class="fa-solid fa-laptop text-gray-500 block text-lg mb-1"></i> Online (Video)
+                                    </button>
+                                </div>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-bold text-gray-700 uppercase mb-2">Elegir Fecha</label>
+                                <input type="date" id="turno-fecha" onchange="window.cargarHorariosDisponibles(this.value)" class="w-full p-3.5 rounded-2xl border border-gray-300 bg-sand text-xs font-semibold text-gray-800">
+                            </div>
+                        </div>
+
+                        <div>
+                            <label class="block text-xs font-bold text-gray-700 uppercase mb-2">Horarios Disponibles</label>
+                            <div id="horarios-container" class="grid grid-cols-3 sm:grid-cols-6 gap-2"></div>
+                        </div>
+                    </div>
+
+                    <!-- IZQUIERDA: RESUMEN DE COMPRA / CARRITO -->
+                    <div class="bg-sand border border-gray-200 rounded-3xl p-6 space-y-5 flex flex-col justify-between">
+                        <div class="space-y-4">
+                            <div class="flex items-center space-x-2 pb-3 border-b border-gray-200">
+                                <i class="fa-solid fa-cart-shopping text-brand-700 text-lg"></i>
+                                <h3 class="font-black text-gray-900 text-base">Resumen de Compra</h3>
+                            </div>
+
+                            <div class="space-y-2 text-xs">
+                                <div>
+                                    <span class="text-gray-400 block font-bold text-[10px] uppercase">Plan Seleccionado</span>
+                                    <span id="cart-plan-name" class="font-extrabold text-gray-900 block leading-tight">Plan Descenso de Grasa & Salud Metabólica</span>
+                                    <span id="cart-plan-mod" class="text-brand-700 font-semibold block text-[11px] mt-0.5">Presencial (Posadas) • 4 semanas</span>
+                                </div>
+
+                                <div class="pt-2 border-t border-gray-200">
+                                    <span class="text-gray-400 block font-bold text-[10px] uppercase">Cita Agendada</span>
+                                    <span id="cart-fecha-hora" class="font-bold text-gray-800 block">📅 Sin fecha a las Sin hora</span>
+                                </div>
+                            </div>
+
+                            <div class="pt-3 border-t border-gray-200 space-y-1.5 text-xs">
+                                <div class="flex justify-between text-gray-600">
+                                    <span>Precio de Lista:</span>
+                                    <span id="cart-subtotal" class="font-bold line-through">$26.000 ARS</span>
+                                </div>
+                                <div class="flex justify-between text-emerald-700 font-bold">
+                                    <span>Descuento Oferta Flash:</span>
+                                    <span id="cart-descuento">-$6.500 ARS</span>
+                                </div>
+                                <div class="flex justify-between text-base font-black text-gray-900 pt-2 border-t border-gray-200">
+                                    <span>Total Final:</span>
+                                    <span id="cart-total" class="text-brand-800">$19.500 ARS</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="space-y-2 pt-4">
+                            <button onclick="window.confirmarYProcesarPago()" class="w-full bg-sky-500 hover:bg-sky-600 text-white font-extrabold py-4 px-4 rounded-2xl transition text-xs shadow flex items-center justify-center space-x-2">
+                                <i class="fa-solid fa-shield-halved"></i>
+                                <span>Comprar con Mercado Pago (Prueba)</span>
+                            </button>
+                            <span class="text-[10px] text-gray-400 block text-center">Sin cargos reales en modo sandbox</span>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+        </section>
+
+        <!-- PESTAÑA: TIENDA -->
+        <section id="tab-tienda" class="tab-content space-y-6">
+            <h2 class="text-2xl font-extrabold text-gray-900">Tienda Saludable & Ebooks</h2>
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-6">
+                <div class="bg-white border border-gray-200 rounded-3xl p-5 shadow-sm space-y-2">
+                    <div class="h-32 bg-sand rounded-2xl flex items-center justify-center text-4xl">📚</div>
+                    <h3 class="font-extrabold text-gray-900">Recetario Digital Antiinflamatorio</h3>
+                    <p class="text-xs text-gray-500">Más de 40 recetas prácticas explicadas paso a paso.</p>
+                    <span class="font-black text-brand-800 block pt-2">$3.500</span>
+                </div>
+                <div class="bg-white border border-gray-200 rounded-3xl p-5 shadow-sm space-y-2">
+                    <div class="h-32 bg-sand rounded-2xl flex items-center justify-center text-4xl">🧉</div>
+                    <h3 class="font-extrabold text-gray-900">Yerba Mate Orgánica YASY</h3>
+                    <p class="text-xs text-gray-500">Yerba mate especial seleccionada, sin polvillo, origen Misiones.</p>
+                    <span class="font-black text-brand-800 block pt-2">$4.500</span>
+                </div>
+            </div>
+        </section>
+
         <!-- PESTAÑA: NUTRICIONISTA -->
         <section id="tab-nutri" class="tab-content space-y-6">
             <div class="bg-white border border-gray-200 rounded-3xl p-6 shadow-sm space-y-4">
@@ -521,7 +1179,7 @@
 
     </main>
 
-    <!-- MODAL DE AUTENTICACIÓN Y REGISTRO COMPLETO -->
+    <!-- MODAL DE AUTENTICACIÓN -->
     <div id="modal-auth" class="hidden fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
         <div class="bg-white rounded-3xl p-6 sm:p-8 max-w-md w-full space-y-5 relative shadow-2xl">
             <button onclick="closeModalAuth()" class="absolute top-5 right-5 text-gray-400 hover:text-gray-600 text-lg">
@@ -533,7 +1191,6 @@
                 <p class="text-xs text-gray-500">Iniciá sesión o registrate gratis para pedir turnos.</p>
             </div>
 
-            <!-- Botones Sociales -->
             <div class="grid grid-cols-2 gap-3">
                 <button onclick="loginWithGoogle()" class="flex items-center justify-center space-x-2 border border-gray-300 hover:bg-gray-50 p-3 rounded-2xl text-xs font-bold text-gray-700">
                     <i class="fa-brands fa-google text-red-500 text-base"></i> <span>Google</span>
@@ -548,7 +1205,6 @@
                 <span class="bg-white px-3 text-[11px] font-bold text-gray-400 uppercase absolute">o con tu email</span>
             </div>
 
-            <!-- Formulario Email/Pass -->
             <div class="space-y-3">
                 <input type="text" id="auth-name" placeholder="Tu Nombre Completo (solo para registro)" class="w-full p-3 border border-gray-300 rounded-xl text-xs bg-sand focus:outline-none focus:border-brand-700">
                 <input type="email" id="auth-email" placeholder="Correo Electrónico" class="w-full p-3 border border-gray-300 rounded-xl text-xs bg-sand focus:outline-none focus:border-brand-700">
@@ -563,6 +1219,45 @@
                     </button>
                 </div>
             </div>
+        </div>
+    </div>
+
+    <!-- MODAL DE EDICIÓN DE PERFIL PACIENTE Y SALUD -->
+    <div id="modal-profile" class="hidden fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-white rounded-3xl p-6 sm:p-8 max-w-md w-full space-y-5 relative shadow-2xl">
+            <button onclick="closeModalProfile()" class="absolute top-5 right-5 text-gray-400 hover:text-gray-600 text-lg">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+
+            <div class="text-center space-y-1">
+                <div class="w-12 h-12 bg-brand-100 text-brand-800 rounded-2xl flex items-center justify-center text-xl mx-auto"><i class="fa-solid fa-user-pen"></i></div>
+                <h3 class="text-xl font-extrabold text-gray-900">Editar Mi Perfil & Datos Médicos</h3>
+                <p class="text-xs text-gray-500">Mantené actualizada tu información para la Dra. Pamela.</p>
+            </div>
+
+            <form onsubmit="guardarPerfilPaciente(event)" class="space-y-4">
+                <div>
+                    <label class="block text-xs font-bold text-gray-700 uppercase mb-1">Nombre Completo</label>
+                    <input type="text" id="profile-edit-name" required class="w-full p-3 border border-gray-300 rounded-xl text-xs bg-sand focus:outline-none focus:border-brand-700">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-gray-700 uppercase mb-1">Número de WhatsApp (con código de país, ej: +549...)</label>
+                    <input type="text" id="profile-edit-phone" placeholder="+5493764000000" class="w-full p-3 border border-gray-300 rounded-xl text-xs bg-sand focus:outline-none focus:border-brand-700">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-gray-700 uppercase mb-1">URL Foto de Perfil (Opcional)</label>
+                    <input type="url" id="profile-edit-photo" placeholder="https://ejemplo.com/mifoto.jpg" class="w-full p-3 border border-gray-300 rounded-xl text-xs bg-sand focus:outline-none focus:border-brand-700">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-gray-700 uppercase mb-1">Antecedentes Médicos / Alergias / Patologías</label>
+                    <textarea id="profile-edit-med" placeholder="Ej: Celíaco, Intolerancia a la lactosa, Diabetes, Hipotiroidismo, Hipertensión..." class="w-full p-3 border border-gray-300 rounded-xl text-xs bg-sand focus:outline-none focus:border-brand-700 h-20"></textarea>
+                </div>
+
+                <div class="flex space-x-2 pt-2">
+                    <button type="button" onclick="closeModalProfile()" class="w-1/2 border border-gray-300 text-gray-600 font-bold py-3 rounded-xl text-xs">Cancelar</button>
+                    <button type="submit" class="w-1/2 bg-brand-700 hover:bg-brand-800 text-white font-extrabold py-3 rounded-xl text-xs shadow">Guardar Cambios</button>
+                </div>
+            </form>
         </div>
     </div>
 
@@ -586,6 +1281,8 @@
 
         function openModalAuth() { document.getElementById('modal-auth').classList.remove('hidden'); }
         function closeModalAuth() { document.getElementById('modal-auth').classList.add('hidden'); }
+        window.closeModalAuth = closeModalAuth;
+        window.openModalAuth = openModalAuth;
     </script>
 </body>
 </html>

@@ -5,33 +5,35 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Nutrición Pam - Lic. Pamela Lagardo</title>
 <!--
-REGLAS DE FIRESTORE (Firebase > Firestore > Reglas > Publicar). Reemplazá PEGAR_UID por el UID de la cuenta de Pamela (Authentication > Usuarios):
+REGLAS DE FIRESTORE (Firebase > Firestore > Reglas > Publicar). Reemplazá TODO el contenido por esto:
 rules_version='2';service cloud.firestore{match /databases/{database}/documents{
  function own(u){return request.auth!=null&&request.auth.uid==u;}
  function ownerOf(e){return e.split('_')[0];}
- function admin(){return request.auth!=null&&request.auth.uid in ['a79ZbGcMT6hQXsfnsIxIRHKYRJK2','UID_DE_PEDRO'];}
+ function admin(){return request.auth!=null&&request.auth.uid in ['a79ZbGcMT6hQXsfnsIxIRHKYRJK2','4VlocKzScmQY6ZGYstBF8fPvqhj1'];}
  function nutri(){return admin()||(request.auth!=null&&exists(/databases/$(database)/documents/nutris/$(request.auth.uid)));}
  function mine(u){return nutri()&&get(/databases/$(database)/documents/users/$(u)).data.nutriId==request.auth.uid;}
  match /users/{u}{allow read:if own(u)||admin()||(nutri()&&resource.data.nutriId==request.auth.uid);allow create:if own(u)||admin();allow update:if own(u)||admin()||mine(u);allow delete:if admin();}
  match /fichas_medicas/{u}{allow read,write:if own(u)||admin()||mine(u);}
- match /planes_nutricionales/{u}{allow read:if own(u)||admin()||mine(u);allow write:if admin()||mine(u);}
- match /turnos/{t}{allow read:if admin()||resource.data.userId==request.auth.uid||(nutri()&&resource.data.nutriId==request.auth.uid);allow create:if request.auth!=null&&request.resource.data.userId==request.auth.uid;allow update,delete:if admin()||(nutri()&&resource.data.nutriId==request.auth.uid);}
- match /slots/{s}{allow read:if true;allow create:if request.auth!=null;allow update,delete:if nutri();}
+ match /planes_nutricionales/{u}{allow read:if own(u)||admin()||mine(u);allow write:if admin()||mine(u);
+  match /partes/{p}{allow read:if own(u)||admin()||mine(u);allow write:if admin()||mine(u);}}
+ match /turnos/{t}{allow read:if admin()||resource.data.userId==request.auth.uid||(nutri()&&resource.data.nutriId==request.auth.uid);allow create:if request.auth!=null&&request.resource.data.userId==request.auth.uid&&existsAfter(/databases/$(database)/documents/slots/$(request.resource.data.slotId));allow update,delete:if admin()||(nutri()&&resource.data.nutriId==request.auth.uid);}
+ match /slots/{s}{allow read:if true;allow create:if nutri()||(request.auth!=null&&existsAfter(/databases/$(database)/documents/turnos/$(request.resource.data.turnoId))&&getAfter(/databases/$(database)/documents/turnos/$(request.resource.data.turnoId)).data.userId==request.auth.uid);allow update,delete:if admin()||(nutri()&&resource.data.nutriId==request.auth.uid);}
  match /productos/{p}{allow read:if true;allow write:if admin();}
  match /ventas/{v}{allow read:if admin();allow create:if request.auth!=null&&request.resource.data.userId==request.auth.uid;}
  match /nutris/{u}{allow read:if admin()||own(u);allow write:if admin();}
  match /equipo/{u}{allow read:if true;allow write:if admin();}
  match /config/{c}{allow read:if true;allow write:if admin();}
+ match /solicitudes/{u}{allow read:if admin()||own(u);allow create:if own(u)&&request.resource.data.estado=='pendiente';allow update,delete:if admin();}
  match /estudios/{e}{allow read:if admin()||own(ownerOf(e))||mine(ownerOf(e));allow create:if own(ownerOf(e))&&e.matches('.*_[1-5]')&&request.resource.data.userId==request.auth.uid;allow delete:if admin()||own(ownerOf(e));
   match /partes/{p}{allow read:if admin()||own(ownerOf(e))||mine(ownerOf(e));allow create,delete:if admin()||own(ownerOf(e));}}
  match /resenas/{u}{allow read:if own(u)||admin()||resource.data.estado=='aprobada';allow create,update:if own(u)&&request.resource.data.userId==request.auth.uid&&request.resource.data.estado=='pendiente'&&request.resource.data.texto.size()<=500;allow update,delete:if admin();}
- match /solicitudes/{u}{allow read:if admin()||own(u);allow create:if own(u)&&request.resource.data.estado=='pendiente';allow update,delete:if admin();}
 }}
 -->
 <script src="https://cdn.tailwindcss.com"></script>
 <script>tailwind.config={theme:{extend:{colors:{brand:{50:'#f2f7f2',100:'#e1efe1',200:'#c5dfc6',600:'#388e3c',700:'#2e7d32',800:'#1b5e20',900:'#0d3b11'},sand:'#faf9f5'}}}}</script>
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <style type="text/tailwindcss">
 .card{@apply bg-white border border-gray-200 rounded-3xl p-6 shadow-sm}
 .btn{@apply bg-brand-700 hover:bg-brand-800 text-white font-extrabold px-5 py-2.5 rounded-2xl text-xs transition cursor-pointer}
@@ -68,13 +70,13 @@ html.dark .text-brand-700,html.dark .text-brand-800,html.dark .text-brand-900{co
 </header>
 
 <main id="view" class="flex-grow max-w-7xl w-full mx-auto px-4 sm:px-6 py-8"></main>
-<footer class="bg-brand-900 text-white mt-10"><div class="max-w-7xl mx-auto px-4 py-8 grid md:grid-cols-3 gap-6 text-sm"><div><b class="block text-base">Licenciada en Nutrición Pamela Lagardo</b><span class="text-brand-200">Matrícula Profesional MP-710</span></div><div><i class="fa-solid fa-location-dot mr-1"></i> Posadas, Misiones, Argentina<br><span class="text-brand-200 text-xs">Atención presencial y online</span></div><div><span class="block text-xs text-brand-200 mb-2">Seguinos</span><div id="footer-redes" class="flex gap-4 text-xl"></div></div></div><div class="text-center text-xs text-brand-200 pb-4">© Nutrición Pam</div></footer>
+<footer class="bg-brand-900 text-white mt-10"><div class="max-w-7xl mx-auto px-4 py-8 grid md:grid-cols-3 gap-6 text-sm"><div><b class="block text-base">Licenciada en Nutrición Pamela Lagardo</b><span class="text-brand-200">Matrícula Profesional MP-710</span></div><div><i class="fa-solid fa-location-dot mr-1"></i> Posadas, Misiones, Argentina<br><span class="text-brand-200 text-xs">Atención presencial y online</span></div><div><span class="block text-xs text-brand-200 mb-2">Seguinos</span><div id="footer-redes" class="flex gap-4 text-xl"></div></div></div><div class="text-center text-xs text-brand-200 pb-4">© Nutrición Pam • <a class="underline cursor-pointer" onclick="verPolitica()">Política de privacidad</a></div></footer>
 <div id="modal"></div>
 
 <script type="module">
 import {initializeApp} from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-import {getAuth,signInWithPopup,GoogleAuthProvider,FacebookAuthProvider,createUserWithEmailAndPassword,signInWithEmailAndPassword,onAuthStateChanged,signOut,updateProfile,sendPasswordResetEmail} from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-import {getFirestore,collection,doc,setDoc,getDoc,getDocs,query,where,addDoc,deleteDoc,serverTimestamp} from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+import {getAuth,signInWithPopup,GoogleAuthProvider,FacebookAuthProvider,createUserWithEmailAndPassword,signInWithEmailAndPassword,onAuthStateChanged,signOut,updateProfile,sendPasswordResetEmail,sendEmailVerification} from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+import {getFirestore,collection,doc,setDoc,getDoc,getDocs,query,where,addDoc,deleteDoc,serverTimestamp,writeBatch} from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
 const app=initializeApp({apiKey:"AIzaSyB4c9pQf8MQMR5A8qe1SKsns5S8euESNiY",authDomain:"kiwipam-22548.firebaseapp.com",projectId:"kiwipam-22548",storageBucket:"kiwipam-22548.firebasestorage.app",messagingSenderId:"984674217063",appId:"1:984674217063:web:48f05154ef4b19afdb38c2"});
 const auth=getAuth(app),db=getFirestore(app);
@@ -122,11 +124,11 @@ async function modalAuth(mode='login'){const reg=mode==='reg',nu=mode==='nutri',
  const ttl=reg?'Creá tu cuenta de paciente':rs?'Recuperá tu contraseña':nu?'Solicitá acceso como nutricionista':'Ingresá a Nutrición Pam';
  const sub=reg?'Completá tus datos para que la nutricionista pueda armar tu plan.':rs?'Te enviamos un link por email para crear una contraseña nueva.':nu?'La administradora revisa tu solicitud y te habilita el acceso al panel.':'Ingresá con tu email y contraseña.';
  const soc=nu||rs?'':`<div class="grid grid-cols-2 gap-3"><button onclick="loginG()" class="btn2"><i class="fa-brands fa-google text-red-500"></i> Google</button><button onclick="loginF()" class="btn2"><i class="fa-brands fa-facebook text-blue-600"></i> Facebook</button></div><p class="text-center text-[0.6875rem] font-bold text-gray-400 uppercase my-3">o con tu email</p>`;
- const mp=`<label class="lbl">Correo electrónico</label><input id="a-mail" type="email" required class="inp">${pw('a-pass','Contraseña (mínimo 6 caracteres)')}${pw('a-pass2','Confirmar contraseña')}`;
+ const mp=`<label class="lbl">Correo electrónico</label><input id="a-mail" type="email" required class="inp">${pw('a-pass','Contraseña (mínimo 8 caracteres)',8)}${pw('a-pass2','Confirmar contraseña',8)}`;
  const nm=`<div class="grid grid-cols-2 gap-2"><div><label class="lbl !mt-0">Nombre</label><input id="a-name" required class="inp"></div><div><label class="lbl !mt-0">Apellido</label><input id="a-last" required class="inp"></div></div>`;
  const lk=(t,m,l)=>`<p class="text-center text-xs mt-3 text-gray-600">${t} <a class="font-bold text-brand-700 cursor-pointer" onclick="modalAuth('${m}')">${l}</a></p>`;
  modal(`<div class="text-center space-y-1 mb-4"><h3 class="text-2xl font-extrabold">${ttl}</h3><p class="text-xs text-gray-500">${sub}</p></div>${soc}
-${reg?`<form onsubmit="regM(event)">${nm}${FIELDS.filter(x=>['nacimiento','sexo','telefono','patologias','objetivo'].includes(x[0])).map(x=>fld(x,'',1)).join('')}${eq.length?`<label class="lbl">Elegí tu nutricionista</label><select id="a-nutri" class="inp"><option value="admin">Lic. Pamela Lagardo</option>${eq.map(e=>`<option value="${e.id}">${esc(e.nombre)}</option>`).join('')}</select>`:''}${mp}<button class="btn w-full mt-5">Crear mi cuenta</button></form>${lk('¿Ya tenés cuenta?','login','Iniciá sesión')}`
+${reg?`<form onsubmit="regM(event)">${nm}${FIELDS.filter(x=>['nacimiento','sexo','telefono','patologias','objetivo'].includes(x[0])).map(x=>fld(x,'',1)).join('')}${eq.length?`<label class="lbl">Elegí tu nutricionista</label><select id="a-nutri" class="inp"><option value="admin">Lic. Pamela Lagardo</option>${eq.map(e=>`<option value="${e.id}">${esc(e.nombre)}</option>`).join('')}</select>`:''}${mp}<label class="flex items-start gap-2 text-xs mt-4"><input id="a-ok" type="checkbox" class="mt-0.5"> <span>${CONSENT_TXT}</span></label><button class="btn w-full mt-4">Crear mi cuenta</button></form>${lk('¿Ya tenés cuenta?','login','Iniciá sesión')}`
 :rs?`<form onsubmit="resetM(event)"><label class="lbl !mt-0">Correo electrónico</label><input id="a-mail" type="email" required class="inp"><button class="btn w-full mt-5">Enviar link de recuperación</button></form>${lk('¿Te acordaste?','login','Volvé a iniciar sesión')}`:nu?`<form onsubmit="regN(event)">${nm}<label class="lbl">Matrícula profesional</label><input id="a-mat" required class="inp">${redesSel()}${mp}<button class="btn w-full mt-5">Enviar solicitud</button></form>${lk('¿Sos paciente?','reg','Registrate acá')}`
 :`<form onsubmit="loginM(event)"><label class="lbl !mt-0">Correo electrónico</label><input id="a-mail" type="email" required class="inp">${pw('a-pass','Contraseña')}<p class="text-right mt-1"><a class="text-xs font-bold text-brand-700 cursor-pointer" onclick="modalAuth('reset')">¿Olvidaste tu contraseña?</a></p><button class="btn w-full mt-4">Iniciar sesión</button></form>${lk('¿Todavía no tenés cuenta?','reg','Registrate')}${lk('¿Sos nutricionista?','nutri','Solicitá acceso')}`}`)}
 const fail=e=>toast('Error: '+(e.code||e.message),1);
@@ -137,12 +139,14 @@ async function regM(e){e.preventDefault();
  const n=$('a-name').value.trim(),ap=$('a-last').value.trim(),m=$('a-mail').value.trim().toLowerCase(),p=$('a-pass').value,v={};
  FIELDS.forEach(x=>{const el=$('f-'+x[0]);if(el)v[x[0]]=el.value.trim()});
  if(p!==$('a-pass2').value)return toast('Las contraseñas no coinciden.',1);
+ if(!$('a-ok').checked)return toast('Tenés que aceptar la política de privacidad para registrarte.',1);
+ if(p.length<8)return toast('La contraseña debe tener al menos 8 caracteres.',1);
  if(!v.nacimiento||!v.sexo||!v.patologias)return toast('Completá fecha de nacimiento, sexo y alergias/intolerancias (escribí "Ninguna" si no tenés).',1);
  if(NUTRI_EMAILS.includes(m))return toast('Ese email es de la nutricionista y no se puede registrar como paciente.',1);
  const nutriId=$('a-nutri')?.value||'admin';S.reg=true;
  try{const r=await createUserWithEmailAndPassword(auth,m,p),dn=n+' '+ap;
-  await updateProfile(r.user,{displayName:dn});
-  await setDoc(doc(db,'users',r.user.uid),{displayName:dn,email:m,role:'paciente',estado:'nuevo',telefono:v.telefono||'',nutriId,createdAt:serverTimestamp()},{merge:true});
+  await updateProfile(r.user,{displayName:dn});sendEmailVerification(r.user).catch(()=>{});
+  await setDoc(doc(db,'users',r.user.uid),{displayName:dn,email:m,role:'paciente',estado:'nuevo',telefono:v.telefono||'',nutriId,consent:{v:CONSENT_V,fecha:serverTimestamp()},createdAt:serverTimestamp()},{merge:true});
   await setDoc(doc(db,'fichas_medicas',r.user.uid),{...v,updatedAt:serverTimestamp()},{merge:true});
  }catch(err){fail(err)}
  S.reg=false;await onUser(auth.currentUser)}
@@ -152,6 +156,7 @@ async function resetM(e){e.preventDefault();
 async function regN(e){e.preventDefault();
  const n=$('a-name').value.trim(),ap=$('a-last').value.trim(),mt=$('a-mat').value.trim(),m=$('a-mail').value.trim().toLowerCase(),p=$('a-pass').value;
  if(p!==$('a-pass2').value)return toast('Las contraseñas no coinciden.',1);
+ if(p.length<8)return toast('La contraseña debe tener al menos 8 caracteres.',1);
  if(NUTRI_EMAILS.includes(m))return toast('Ese email pertenece a la administradora.',1);
  S.reg=true;
  try{const r=await createUserWithEmailAndPassword(auth,m,p);
@@ -162,7 +167,7 @@ async function regN(e){e.preventDefault();
 const logout=()=>signOut(auth);
 
 async function onUser(u){
- S.user=u;S.nutri=false;S.admin=false;S.pend=null;S.estado='nuevo';S.nutriId='admin';S.info={};
+ S.user=u;S.nutri=false;S.admin=false;S.pend=null;S.consent=true;S.estado='nuevo';S.nutriId='admin';S.info={};
  if(u){
   const em=(u.email||'').toLowerCase();closeModal();
   if(NUTRI_EMAILS.includes(em)){
@@ -175,7 +180,7 @@ async function onUser(u){
      if(sd.exists())S.pend=sd.data().estado||'pendiente';
      else{const r=doc(db,'users',u.uid),x=await getDoc(r);
       if(!x.exists())await setDoc(r,{displayName:u.displayName||em.split('@')[0],email:em,role:'paciente',estado:'nuevo',nutriId:'admin',createdAt:serverTimestamp()});
-      const d=x.data()||{};S.estado=d.estado||'nuevo';S.nutriId=d.nutriId||'admin'}}
+      const d=x.data()||{};S.estado=d.estado||'nuevo';S.nutriId=d.nutriId||'admin';S.consent=!!d.consent}}
    }catch(e){console.warn(e)}
    if(!S.nutri&&!S.pend&&S.estado==='nuevo'){S.tab='ficha';toast('Completá tus datos para pasar a "Paciente activo".')}
   }
@@ -197,14 +202,15 @@ const NAV=[['dashboard','fa-house','Inicio','all'],['turnos','fa-calendar-plus',
 const allowed=r=>r==='all'||(r==='admin'?S.admin:r==='nutri'?S.nutri:!S.nutri);
 async function go(t){
  if(S.pend){$('nav').innerHTML='';$('view').innerHTML=PEND();return}
- if(!NAV.find(n=>n[0]===t&&allowed(n[3])))t=S.nutri?'nutri':'dashboard';
+ if(S.user&&!S.nutri&&!S.consent){$('nav').innerHTML='';$('view').innerHTML=CONSENT();return}
+ if(!(t==='paciente'&&S.nutri&&S.pac)&&!NAV.find(n=>n[0]===t&&allowed(n[3])))t=S.nutri?'nutri':'dashboard';
  S.tab=t;
- $('nav').innerHTML=NAV.filter(n=>allowed(n[3])).map(n=>`<button onclick="go('${n[0]}')" class="whitespace-nowrap px-3.5 py-2 rounded-xl text-xs font-bold transition ${n[0]===t?'bg-brand-700 text-white shadow-sm':n[3]==='nutri'?'text-purple-700 bg-purple-50':'text-gray-600 hover:text-brand-800 bg-gray-100'}"><i class="fa-solid ${n[1]} mr-1"></i>${n[2]}</button>`).join('');
+ $('nav').innerHTML=NAV.filter(n=>allowed(n[3])).map(n=>`<button onclick="go('${n[0]}')" class="whitespace-nowrap px-3.5 py-2 rounded-xl text-xs font-bold transition ${(n[0]===t||(t==='paciente'&&n[0]===(S.volver||'fichas')))?'bg-brand-700 text-white shadow-sm':n[3]==='nutri'?'text-purple-700 bg-purple-50':'text-gray-600 hover:text-brand-800 bg-gray-100'}"><i class="fa-solid ${n[1]} mr-1"></i>${n[2]}</button>`).join('');
  $('view').innerHTML='<div class="text-center py-20 text-gray-400"><i class="fa-solid fa-spinner fa-spin text-2xl"></i></div>';
  if(t==='turnos'||t==='precios')await loadCfg();
  if(t==='dashboard'||t==='precios')await loadSitio();
  const h=await VIEWS[t]();
- if(S.tab===t){$('view').innerHTML=h;if(t==='turnos')cargarHoras()}
+ if(S.tab===t){$('view').innerHTML=h;if(t==='turnos')cargarHoras();if(t==='plan')cargarVisor(S.planUid);if(t==='paciente')cargarVisor(S.pac)}
 }
 
 /* ===== VISTAS ===== */
@@ -230,13 +236,13 @@ ${S.mod.startsWith('Online')?`<div class="bg-blue-50 border border-blue-200 roun
 tienda:async()=>{const ps=await all('productos'),cnt={};S.prods={};ps.forEach(p=>S.prods[p.id]=p);
  if(S.admin)(await all('ventas')).forEach(v=>cnt[v.productId]=(cnt[v.productId]||0)+1);
  return `<div class="space-y-6"><div class="flex flex-wrap justify-between items-center gap-3"><h2 class="text-2xl font-extrabold">Tienda Saludable & Ebooks</h2>${S.admin?`<div class="flex gap-2">${ps.length?'':`<button class="btn2" onclick="seedProd()">Cargar artículos de ejemplo</button>`}<button class="btn" onclick="modalProd()"><i class="fa-solid fa-plus"></i> Agregar artículo</button></div>`:''}</div>
-${ps.length?`<div class="grid grid-cols-1 sm:grid-cols-3 gap-6">${ps.map(p=>`<div class="card !p-5 space-y-2 relative"><div onclick="verProd('${p.id}')" class="h-40 bg-sand rounded-2xl flex items-center justify-center text-5xl cursor-pointer overflow-hidden">${(p.imgs||[])[0]?`<img src="${esc(p.imgs[0])}" class="w-full h-full object-cover">`:esc(p.emoji||'🛍️')}</div>${S.admin?`<button onclick="modalProd('${p.id}')" class="absolute top-7 right-7 w-9 h-9 rounded-full bg-white shadow border border-gray-200 text-gray-600 hover:text-brand-700" title="Editar artículo"><i class="fa-solid fa-gear"></i></button>`:''}<h3 class="font-extrabold">${esc(p.nombre)}</h3><p class="text-xs text-gray-500">${esc(p.desc)}</p><div class="flex justify-between items-center pt-2"><b class="text-brand-800 text-lg">${money(p.precio)}</b>${S.admin?`<span class="chip bg-purple-100 text-purple-800">Vendidos: ${cnt[p.id]||0}</span>`:S.nutri?'':`<button class="btn" onclick="comprar('${p.id}')"><i class="fa-solid fa-cart-shopping"></i> Comprar</button>`}</div></div>`).join('')}</div>`:`<div class="card text-center text-sm text-gray-500">${S.admin?'Todavía no hay artículos. Agregá el primero con el botón de arriba.':'Pronto vas a encontrar acá recetarios y productos recomendados.'}</div>`}</div>`},
+${ps.length?`<div class="grid grid-cols-1 sm:grid-cols-3 gap-6">${ps.map(p=>`<div class="card !p-5 space-y-2 relative"><div onclick="verProd('${p.id}',(S.ci&&S.ci['${p.id}'])||0)" class="relative h-40 bg-sand rounded-2xl flex items-center justify-center text-5xl cursor-pointer overflow-hidden">${(p.imgs||[])[0]?`<img id="cv-${p.id}" src="${esc(p.imgs[0])}" class="w-full h-full object-cover">`:esc(p.emoji||'🛍️')}${(p.imgs||[]).length>1?`<button onclick="event.stopPropagation();moverCard('${p.id}',-1)" class="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/40 text-white text-lg" title="Anterior">‹</button><button onclick="event.stopPropagation();moverCard('${p.id}',1)" class="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/40 text-white text-lg" title="Siguiente">›</button><span class="absolute bottom-2 left-2 chip bg-black/50 text-white">${p.imgs.length} fotos</span>`:''}</div>${S.admin?`<button onclick="modalProd('${p.id}')" class="absolute top-7 right-7 w-9 h-9 rounded-full bg-white shadow border border-gray-200 text-gray-600 hover:text-brand-700" title="Editar artículo"><i class="fa-solid fa-gear"></i></button>`:''}<h3 class="font-extrabold">${esc(p.nombre)}</h3><p class="text-xs text-gray-500">${esc(p.desc)}</p><div class="flex justify-between items-center pt-2"><b class="text-brand-800 text-lg">${money(p.precio)}</b>${S.admin?`<span class="chip bg-purple-100 text-purple-800">Vendidos: ${cnt[p.id]||0}</span>`:S.nutri?'':`<button class="btn" onclick="comprar('${p.id}')"><i class="fa-solid fa-cart-shopping"></i> Comprar</button>`}</div></div>`).join('')}</div>`:`<div class="card text-center text-sm text-gray-500">${S.admin?'Todavía no hay artículos. Agregá el primero con el botón de arriba.':'Pronto vas a encontrar acá recetarios y productos recomendados.'}</div>`}</div>`},
 
-plan:async()=>{if(!S.user)return needLogin();const uid=S.user.uid;let plan='',tu=[];
- try{plan=((await getDoc(doc(db,'planes_nutricionales',uid))).data()||{}).plan||''}catch(e){console.warn(e)}
+plan:async()=>{if(!S.user)return needLogin();const uid=S.user.uid;let pd={},tu=[];
+ try{pd=(await getDoc(doc(db,'planes_nutricionales',uid))).data()||{}}catch(e){console.warn(e)}
  try{tu=(await getDocs(query(collection(db,'turnos'),where('userId','==',uid)))).docs.map(d=>d.data())}catch(e){console.warn(e)}
  tu.sort((a,b)=>(a.fecha+a.hora).localeCompare(b.fecha+b.hora));
- return `<div class="space-y-6"><div class="card space-y-4"><h2 class="text-2xl font-extrabold">Mi Plan Alimentario</h2>${plan?`<div class="p-6 bg-sand rounded-2xl text-sm leading-relaxed">${br(plan)}</div>`:`<div class="p-8 text-center bg-sand rounded-3xl space-y-2"><div class="text-3xl">⏳</div><h3 class="font-extrabold">Esperá que la nutricionista Pamela cargue tu plan</h3><p class="text-xs text-gray-600 max-w-md mx-auto">Tu plan alimentario personalizado se carga luego de tu consulta presencial u online.</p></div>`}</div>
+ return `<div class="space-y-6"><div class="card space-y-4"><h2 class="text-2xl font-extrabold">Mi Plan Alimentario</h2>${planHTML(pd,uid)}</div>
 <div class="card space-y-3"><h3 class="text-lg font-extrabold">Mis turnos</h3>${tu.length?tu.map(t=>`<div class="flex flex-wrap justify-between items-center gap-2 p-3 bg-sand rounded-2xl text-xs"><div><b>${esc(t.plan)}</b><br><span class="text-gray-500">${esc(t.modalidad)} • ${esc(t.fecha)} ${esc(t.hora)}</span></div>${badgeAsist(t.asistencia)}</div>`).join(''):'<p class="text-xs text-gray-500">Todavía no reservaste ningún turno.</p>'}</div>${await resenaCard(uid,tu)}</div>`},
 
 ficha:async()=>{if(!S.user)return needLogin();const uid=S.user.uid;let f={};const es=await listEst(uid);
@@ -255,8 +261,8 @@ nutri:async()=>{const [us,tu]=await Promise.all([misUsers(),misTurnos()]);const 
 <div class="grid grid-cols-2 md:grid-cols-4 gap-4">${st.filter((s,i)=>S.admin||[0,1,2,5].includes(i)).map(s=>`<div class="card !p-4"><i class="fa-solid ${s[2]} text-brand-700"></i><span class="block text-[0.6875rem] font-bold text-gray-500 mt-1">${s[0]}</span><b class="text-lg break-words">${s[1]}</b></div>`).join('')}</div>
 <div class="card space-y-3"><h3 class="text-xl font-extrabold text-purple-900">Mis pacientes</h3>${patList(pac,fi)}</div></div>`},
 
-fichas:async()=>{const us=await misUsers(),fi=await fichasDe(us);
- return `<div class="space-y-4"><h2 class="text-2xl font-extrabold text-purple-900">FICHAS MÉDICAS</h2><div class="card space-y-3">${patList(us.filter(u=>u.role==='paciente'),fi,1)}</div></div>`},
+fichas:async()=>{const us=await misUsers(),fi=await fichasDe(us);S.fd={us:us.filter(u=>u.role==='paciente'),fi};
+ return `<div class="space-y-4"><h2 class="text-2xl font-extrabold text-purple-900">FICHAS MÉDICAS</h2><div class="card space-y-3"><div class="flex flex-wrap gap-2"><div class="relative flex-1 min-w-[200px]"><i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i><input id="fb-q" oninput="filtrarFichas()" placeholder="Buscar por nombre o apellido..." class="inp pl-9"></div><select id="fb-o" onchange="filtrarFichas()" class="inp !w-auto"><option value="na">Nombre A → Z</option><option value="nz">Nombre Z → A</option><option value="aa">Apellido A → Z</option><option value="az">Apellido Z → A</option></select></div><div id="f-lista">${listaFichas()}</div></div></div>`},
 
 agenda:async()=>{const tu=await misTurnos();tu.sort((a,b)=>(a.fecha+a.hora).localeCompare(b.fecha+b.hora));S.turnos={};tu.forEach(t=>S.turnos[t.id]=t);
  return `<div class="space-y-4"><h2 class="text-2xl font-extrabold text-purple-900">Planes y Turnos</h2><div class="card space-y-3">${tu.length?tu.map(t=>`<div class="p-4 bg-sand border border-gray-200 rounded-2xl space-y-2"><div class="flex flex-wrap justify-between items-center gap-2"><div class="cursor-pointer" onclick="abrirFicha('${t.userId}')"><b class="text-sm hover:underline">${esc(t.paciente)}</b><span class="text-xs text-gray-500 block">${esc(t.email)}</span></div>${badgeAsist(t.asistencia)}</div><p class="text-xs text-gray-700"><b>${esc(t.plan)}</b> • ${esc(t.modalidad)} • 📅 ${esc(t.fecha)} ${esc(t.hora)} • ${money(t.monto)}</p><div class="flex flex-wrap gap-2"><button onclick="setAsist('${t.id}','confirmada')" class="chip bg-emerald-600 text-white">Confirmar asistencia</button><button onclick="setAsist('${t.id}','cancelada')" class="chip bg-red-600 text-white">Cancelar asistencia</button><button onclick="setAsist('${t.id}','pendiente')" class="chip bg-yellow-400 text-yellow-900">Pendiente</button><button onclick="setFin('${t.id}')" class="chip bg-sky-600 text-white">Tratamiento finalizado</button></div></div>`).join(''):'<p class="text-xs text-gray-500">Todavía no hay turnos reservados.</p>'}</div></div>`}
@@ -268,10 +274,7 @@ function fld(x,v,nw){const [k,l,t,r]=x,warn=!nw&&r&&!String(v??'').trim()?' <spa
  return `<label class="lbl">${l}${warn}</label>${inp}`}
 function patList(pac,fi,detalle){if(!pac.length)return '<p class="text-xs text-gray-500">Todavía no hay pacientes registrados.</p>';
  return `<div class="${detalle?'grid md:grid-cols-2 gap-3':'space-y-3'}">${pac.map(p=>{const f=fi.find(x=>x.id===p.id)||{};return `<div onclick="abrirFicha('${p.id}')" class="border border-gray-200 rounded-2xl p-4 bg-sand cursor-pointer hover:border-brand-600 flex justify-between items-start gap-2"><div><h4 class="font-bold text-sm">${esc(p.displayName||'Paciente sin nombre')}</h4><span class="text-xs text-gray-500">${esc(p.email)}${f.telefono?' • Tel: '+esc(f.telefono):''}</span>${f.patologias?`<p class="text-[0.6875rem] text-red-600 font-semibold mt-0.5"><i class="fa-solid fa-notes-medical"></i> ${esc(f.patologias)}</p>`:''}${detalle?`<p class="text-[0.6875rem] text-gray-600 mt-1">${f.peso?esc(f.peso)+' kg':'-- kg'} • ${f.altura?esc(f.altura)+' cm':'-- cm'} • Grasa ${f.grasa?esc(f.grasa)+'%':'--'}</p>`:''}${completa(f)?'':'<p class="text-[0.6875rem] text-amber-700 font-bold mt-0.5">Por favor rellene información</p>'}</div>${badgeEstado(p.estado)}</div>`}).join('')}</div>`}
-async function abrirFicha(id){
- const [u,f,p]=await Promise.all(['users','fichas_medicas','planes_nutricionales'].map(c=>getDoc(doc(db,c,id)).catch(()=>null)));const eq=S.admin?await all('equipo'):[];const es=await listEst(id);
- const us=u?.data()||{},fi=f?.data()||{};
- modal(`<div class="mb-2 pr-6"><h3 class="text-xl font-extrabold">${esc(us.displayName||'Paciente')}</h3><span class="text-xs text-gray-500">${esc(us.email)}</span> ${badgeEstado(us.estado)}</div><p class="text-[0.6875rem] text-gray-500">Si el paciente no completó sus datos, podés rellenarlos vos.</p><label class="lbl">Estudios médicos (${es.length}/5)</label><div class="space-y-2">${estHTML(es,S.admin)}</div><form onsubmit="guardarFicha(event,'${id}')">${FIELDS.map(x=>fld(x,fi[x[0]])).join('')}${S.admin?`<label class="lbl">Nutricionista a cargo</label><select id="f-nutriId" class="inp"><option value="admin">Lic. Pamela Lagardo</option>${eq.map(e=>`<option value="${e.id}"${us.nutriId===e.id?' selected':''}>${esc(e.nombre)}</option>`).join('')}</select>`:''}<label class="lbl">Plan alimentario</label><textarea id="f-plan" class="inp h-28" placeholder="Detalles del plan, semanas, menúes...">${esc(p?.data()?.plan)}</textarea><button class="btn mt-5 w-full">Guardar</button></form>`)}
+function abrirFicha(id){S.volver=S.tab==='paciente'?S.volver:S.tab;S.pac=id;S.pacEdit=false;go('paciente')}
 async function guardarFicha(e,id){e.preventDefault();
  try{const ref=doc(db,'fichas_medicas',id),cur=(await getDoc(ref)).data()||{},v={};
   FIELDS.forEach(x=>{const el=$('f-'+x[0]);if(el)v[x[0]]=el.value.trim()});
@@ -280,13 +283,13 @@ async function guardarFicha(e,id){e.preventDefault();
   await setDoc(doc(db,'users',id),{estado,telefono:nf.telefono||'',...($('f-nutriId')?{nutriId:$('f-nutriId').value}:{})},{merge:true});
   if($('f-plan')?.value.trim())await setDoc(doc(db,'planes_nutricionales',id),{plan:$('f-plan').value,updatedAt:serverTimestamp()},{merge:true});
   if(!S.nutri){S.estado=estado}
-  closeModal();toast(estado==='activo'?'¡Datos guardados! Ya sos paciente activo.':'Datos guardados. Faltan campos para pasar a paciente activo.');render();
+  S.pacEdit=false;closeModal();toast(estado==='activo'?'¡Datos guardados! Ya sos paciente activo.':'Datos guardados. Faltan campos para pasar a paciente activo.');render();
  }catch(err){toast('No se pudo guardar: '+err.message,1)}}
 
 /* ===== AGENDA / TURNOS ===== */
 async function setAsist(id,a){const t=S.turnos[id];if(!t)return;
  try{await setDoc(doc(db,'turnos',id),{asistencia:a},{merge:true});
-  const nid=t.nutriId||'admin',sid=doc(db,'slots',slotId(nid,t.fecha,t.hora));a==='cancelada'?await deleteDoc(sid):await setDoc(sid,{nutriId:nid,fecha:t.fecha,hora:t.hora});
+  const nid=t.nutriId||'admin',sid=doc(db,'slots',slotId(nid,t.fecha,t.hora));a==='cancelada'?await deleteDoc(sid):await setDoc(sid,{nutriId:nid,fecha:t.fecha,hora:t.hora,turnoId:id});
   go('agenda')}catch(e){toast('Error: '+e.message,1)}}
 function cartHTML(){const p=PLANES[S.plan];return `<div class="space-y-4"><div class="flex items-center space-x-2 pb-3 border-b border-gray-200"><i class="fa-solid fa-cart-shopping text-brand-700"></i><h3 class="font-black">Resumen de compra</h3></div><div class="text-xs space-y-2"><span class="text-gray-400 block font-bold text-[0.625rem]">Plan seleccionado</span><b class="block leading-tight">${p.n}</b><span class="text-brand-700 font-semibold block">${S.mod} • ${p.dur}</span><div class="pt-2 border-t border-gray-200"><span class="text-gray-400 block font-bold text-[0.625rem]">Cita</span><b>📅 ${S.fecha} a las ${S.hora||'(elegí un horario)'}</b></div></div>
 <div class="pt-3 border-t border-gray-200 space-y-1 text-xs"><div class="flex justify-between text-gray-600"><span>Precio de lista:</span><span class="${ofertaOn()?'line-through':''}">${money(p.reg)}</span></div>${ofertaOn()?`<div class="flex justify-between text-emerald-700 font-bold"><span>Descuento promocional:</span><span>-${money(p.reg-p.of)}</span></div>`:''}<div class="flex justify-between text-base font-black pt-2 border-t border-gray-200"><span>Total:</span><span class="text-brand-800">${money(precio(p))} ARS</span></div></div>
@@ -304,8 +307,8 @@ async function pagar(){
  if(!S.hora)return toast('Elegí un horario disponible.',1);
  const p=PLANES[S.plan],sid=doc(db,'slots',slotId(S.nutriId,S.fecha,S.hora));
  try{if((await getDoc(sid)).exists()){cargarHoras();return toast('Ese horario se acaba de ocupar. Elegí otro.',1)}
-  await setDoc(sid,{nutriId:S.nutriId,fecha:S.fecha,hora:S.hora});
-  await addDoc(collection(db,'turnos'),{userId:S.user.uid,paciente:nombre(),email:S.user.email,plan:p.n,planKey:p.k,modalidad:S.mod,fecha:S.fecha,hora:S.hora,monto:precio(p),nutriId:S.nutriId,asistencia:'pendiente',createdAt:serverTimestamp()});
+  const tid=doc(collection(db,'turnos')).id,b=writeBatch(db);b.set(sid,{nutriId:S.nutriId,fecha:S.fecha,hora:S.hora,turnoId:tid});
+  b.set(doc(db,'turnos',tid),{slotId:sid.id,userId:S.user.uid,paciente:nombre(),email:S.user.email,plan:p.n,planKey:p.k,modalidad:S.mod,fecha:S.fecha,hora:S.hora,monto:precio(p),nutriId:S.nutriId,asistencia:'pendiente',createdAt:serverTimestamp()});await b.commit();
  }catch(e){return toast('No se pudo reservar: '+e.message,1)}
  modal(`<div class="text-center space-y-3"><div class="w-14 h-14 bg-sky-100 text-sky-600 rounded-full flex items-center justify-center text-2xl mx-auto"><i class="fa-solid fa-cart-shopping"></i></div><h3 class="text-xl font-black">Turno reservado</h3><p class="text-xs text-gray-500">Revisá los detalles y abonalo en Mercado Pago.</p></div><div class="bg-sand p-4 rounded-2xl border border-gray-200 text-xs space-y-1 my-4"><b class="text-sm block">${p.n}</b><span class="text-brand-800 font-semibold">${S.mod} • ${S.fecha} a las ${S.hora}</span><div class="pt-2 mt-2 border-t border-gray-200 flex justify-between"><b>Monto total:</b><b class="text-lg text-brand-800">${money(precio(p))} ARS</b></div></div><button onclick="irMP('${p.k}')" class="w-full bg-sky-500 hover:bg-sky-600 text-white font-extrabold py-3.5 rounded-2xl text-xs"><i class="fa-solid fa-lock"></i> Ir a pagar en Mercado Pago</button><button onclick="closeModal()" class="btn2 w-full mt-2">Pagar después</button>`)}
 function irMP(k){const p=PLANES.find(x=>x.k===k),l=ofertaOn()?p.linkOf:p.linkReg;if(!l){closeModal();return toast('Tu turno quedó reservado. La nutricionista te va a contactar para coordinar el pago.')}location.href=l}
@@ -372,7 +375,7 @@ function cambiarTema(){oscuro=!oscuro;LS.set('tema',oscuro?'dark':'light');aplic
 
 /* ===== UTILIDADES NUEVAS ===== */
 const askLogout=()=>modal(`<div class="text-center space-y-4"><div class="text-4xl">👋</div><h3 class="text-xl font-extrabold">¿Estás seguro que querés cerrar sesión?</h3><div class="grid grid-cols-2 gap-3"><button class="btn" onclick="closeModal();logout()">Sí, cerrar sesión</button><button class="btn2" onclick="closeModal()">No</button></div></div>`);
-const pw=(id,l)=>`<label class="lbl">${l}</label><div class="relative"><input id="${id}" type="password" minlength="6" required class="inp pr-10"><button type="button" tabindex="-1" onclick="verPw('${id}',this)" class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600" title="Mostrar u ocultar contraseña"><i class="fa-solid fa-eye"></i></button></div>`;
+const pw=(id,l,min)=>`<label class="lbl">${l}</label><div class="relative"><input id="${id}" type="password"${min?` minlength="${min}"`:''} required class="inp pr-10"><button type="button" tabindex="-1" onclick="verPw('${id}',this)" class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600" title="Mostrar u ocultar contraseña"><i class="fa-solid fa-eye"></i></button></div>`;
 function verPw(id,b){const i=$(id),v=i.type==='password';i.type=v?'text':'password';b.innerHTML=`<i class="fa-solid ${v?'fa-eye-slash':'fa-eye'}"></i>`}
 function irTurno(m){S.mod=m;S.hora=null;go('turnos')}
 const verFoto=src=>modal(`<img src="${esc(src)}" class="w-full rounded-2xl">`);
@@ -388,9 +391,9 @@ const redesTxt=r=>Object.keys(r||{}).length?`<span class="block text-[0.6875rem]
 S.sitio={};
 async function loadSitio(){try{const d=await getDoc(doc(db,'config','sitio'));S.sitio=d.exists()?d.data():{}}catch(e){console.warn(e)}renderFooter()}
 function renderFooter(){const r=(S.sitio||{}).redes||{};$('footer-redes').innerHTML=REDES.map(x=>{const u=redUrl(x[0],r[x[0]]);return u?`<a href="${esc(u)}" target="_blank" rel="noopener" class="hover:text-brand-200" title="${x[1]}"><i class="${x[2]}"></i></a>`:''}).join('')||'<span class="text-xs text-brand-200">Próximamente</span>'}
-const sitioCard=()=>{const r=(S.sitio||{}).redes||{};return `<div class="card space-y-3"><h3 class="text-lg font-extrabold">Redes sociales de Pamela</h3><p class="text-[0.6875rem] text-gray-500">Escribí el usuario (con o sin @) o el link completo. Se muestran en el pie de página.</p><div class="grid sm:grid-cols-2 gap-3">${REDES.map(x=>`<div><label class="lbl !mt-0"><i class="${x[2]}"></i> ${x[1]}</label><input id="rs-${x[0]}" class="inp" value="${esc(r[x[0]])}"></div>`).join('')}</div><label class="flex items-center gap-2 text-xs font-bold"><input id="rs-ej" type="checkbox" ${(S.sitio||{}).ejemplos===false?'':'checked'}> Mostrar los testimonios de ejemplo en el inicio</label><button class="btn" onclick="guardarSitio()">Guardar redes y sitio</button></div>`};
+const sitioCard=()=>{const r=(S.sitio||{}).redes||{};return `<div class="card space-y-3"><h3 class="text-lg font-extrabold">Redes sociales de Pamela</h3><p class="text-[0.6875rem] text-gray-500">Escribí el usuario (con o sin @) o el link completo. Se muestran en el pie de página.</p><div class="grid sm:grid-cols-2 gap-3">${REDES.map(x=>`<div><label class="lbl !mt-0"><i class="${x[2]}"></i> ${x[1]}</label><input id="rs-${x[0]}" class="inp" value="${esc(r[x[0]])}"></div>`).join('')}</div><label class="lbl">Email de contacto (para la política de privacidad)</label><input id="rs-mail" type="email" class="inp" value="${esc((S.sitio||{}).contacto)}"><label class="flex items-center gap-2 text-xs font-bold mt-3"><input id="rs-ej" type="checkbox" ${(S.sitio||{}).ejemplos===false?'':'checked'}> Mostrar los testimonios de ejemplo en el inicio</label><button class="btn" onclick="guardarSitio()">Guardar redes y sitio</button></div><div class="card space-y-3"><h3 class="text-lg font-extrabold">Copia de seguridad</h3><p class="text-xs text-gray-600">Descarga todos los datos (pacientes, fichas, turnos, ventas, reseñas) en un archivo. Contiene información de salud: guardalo en un lugar seguro y no lo compartas. Los PDF de estudios y las fotos no se incluyen.</p><button class="btn" onclick="descargarCopia()"><i class="fa-solid fa-download"></i> Descargar copia</button></div>`};
 async function guardarSitio(){const redes={};REDES.forEach(x=>{const v=$('rs-'+x[0]).value.trim();if(v)redes[x[0]]=v});
- try{await setDoc(doc(db,'config','sitio'),{redes,ejemplos:$('rs-ej').checked,updatedAt:serverTimestamp()});await loadSitio();toast('Redes y sitio guardados.')}catch(e){toast('Error: '+e.message,1)}}
+ try{await setDoc(doc(db,'config','sitio'),{redes,ejemplos:$('rs-ej').checked,contacto:$('rs-mail').value.trim(),updatedAt:serverTimestamp()});await loadSitio();toast('Redes y sitio guardados.')}catch(e){toast('Error: '+e.message,1)}}
 
 /* ===== ESTUDIOS MÉDICOS (PDF guardados en Firestore, sin Storage) ===== */
 const MAX_PDF=3*1024*1024,CH=900000;
@@ -424,7 +427,7 @@ async function addImgs(inp){S.pimgs=S.pimgs||[];try{for(const f of [...inp.files
 function quitarImg(i){S.pimgs.splice(i,1);$('p-prev').innerHTML=prevHTML()}
 function portadaImg(i){S.pimgs.unshift(S.pimgs.splice(i,1)[0]);$('p-prev').innerHTML=prevHTML()}
 function verProd(id,i=0){const p=S.prods[id];if(!p)return;const im=p.imgs||[];
- modal(`<div class="space-y-3"><div class="h-64 bg-sand rounded-2xl flex items-center justify-center text-6xl overflow-hidden">${im.length?`<img src="${esc(im[i])}" class="w-full h-full object-contain">`:esc(p.emoji||'🛍️')}</div>${im.length>1?`<div class="flex gap-2 overflow-x-auto">${im.map((u,j)=>`<img src="${esc(u)}" onclick="verProd('${id}',${j})" class="w-14 h-14 object-cover rounded-xl cursor-pointer border-2 ${j===i?'border-brand-700':'border-transparent'}">`).join('')}</div>`:''}<h3 class="text-xl font-extrabold">${esc(p.nombre)}</h3><div class="flex justify-between gap-4 items-start"><p class="text-sm text-gray-600 whitespace-pre-line flex-1">${esc(p.desc)}</p><b class="text-2xl text-brand-800 whitespace-nowrap">${money(p.precio)}</b></div>${S.nutri?'':`<button class="btn w-full" onclick="closeModal();comprar('${id}')"><i class="fa-solid fa-cart-shopping"></i> Comprar</button>`}<p class="text-[0.6875rem] text-gray-500"><i class="fa-solid fa-credit-card"></i> Aceptamos tarjetas de crédito y débito y Mercado Pago.</p></div>`)}
+ modal(`<div class="space-y-3"><div class="relative h-64 bg-sand rounded-2xl flex items-center justify-center text-6xl overflow-hidden">${im.length?`<img src="${esc(im[i])}" class="w-full h-full object-contain cursor-zoom-in" onclick="fsImg('${id}',${i})">`:esc(p.emoji||'🛍️')}${im.length>1?`<button onclick="verProd('${id}',${(i-1+im.length)%im.length})" class="absolute left-2 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-black/40 text-white text-xl" title="Anterior">‹</button><button onclick="verProd('${id}',${(i+1)%im.length})" class="absolute right-2 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-black/40 text-white text-xl" title="Siguiente">›</button>`:''}${im.length?`<button onclick="fsImg('${id}',${i})" class="absolute bottom-2 right-2 w-9 h-9 rounded-full bg-black/40 text-white" title="Pantalla completa"><i class="fa-solid fa-expand"></i></button>`:''}</div>${im.length>1?`<div class="flex gap-2 overflow-x-auto">${im.map((u,j)=>`<img src="${esc(u)}" onclick="verProd('${id}',${j})" class="w-14 h-14 object-cover rounded-xl cursor-pointer border-2 ${j===i?'border-brand-700':'border-transparent'}">`).join('')}</div>`:''}<h3 class="text-xl font-extrabold">${esc(p.nombre)}</h3><div class="flex justify-between gap-4 items-start"><p class="text-sm text-gray-600 whitespace-pre-line flex-1">${esc(p.desc)}</p><b class="text-2xl text-brand-800 whitespace-nowrap">${money(p.precio)}</b></div>${S.nutri?'':`<button class="btn w-full" onclick="closeModal();comprar('${id}')"><i class="fa-solid fa-cart-shopping"></i> Comprar</button>`}<p class="text-[0.6875rem] text-gray-500"><i class="fa-solid fa-credit-card"></i> Aceptamos tarjetas de crédito y débito y Mercado Pago.</p></div>`)}
 
 /* ===== RESEÑAS ===== */
 const resCard=r=>`<div class="card !p-5 flex flex-col justify-between gap-3"><div><p class="text-xs text-gray-600 italic">"${esc(r.texto)}"</p>${(r.fotos||[]).length?`<div class="flex gap-1 mt-2">${r.fotos.map(f=>`<img src="${esc(f)}" onclick="verFoto(this.src)" class="w-14 h-14 object-cover rounded-lg cursor-pointer">`).join('')}</div>`:''}</div><div class="pt-2 border-t border-gray-100"><b class="block text-xs">${esc(r.nombre)}</b><span class="text-[0.625rem] text-brand-700 font-semibold">${esc(r.plan||'Paciente')}</span></div></div>`;
@@ -452,14 +455,86 @@ VIEWS.resenas=async()=>{const rs=await all('resenas'),pen=rs.filter(r=>r.estado=
 async function setResena(id,estado){try{await setDoc(doc(db,'resenas',id),{estado},{merge:true});go('resenas')}catch(e){toast('Error: '+e.message,1)}}
 async function setFin(id){try{await setDoc(doc(db,'turnos',id),{finalizado:true},{merge:true});toast('Tratamiento finalizado. El paciente ya puede dejar su reseña.');go('agenda')}catch(e){toast('Error: '+e.message,1)}}
 
+/* ===== POLÍTICA DE PRIVACIDAD Y CONSENTIMIENTO ===== */
+const CONSENT_V='1.0';
+const CONSENT_TXT='Leí y acepto la <a class="underline text-brand-700 cursor-pointer" onclick="verPolitica()">Política de Privacidad</a> y presto mi consentimiento para el tratamiento de mis datos personales y de salud. Declaro ser mayor de 18 años o actuar como madre, padre o tutor legal del paciente.';
+const POLITICA=()=>{const c=(S.sitio||{}).contacto;return `<div class="space-y-2 text-xs leading-relaxed"><p><b>1. Responsable.</b> Lic. Pamela Lagardo (MP-710), Posadas, Misiones, Argentina. Contacto: ${c?esc(c):'los medios de contacto publicados en este sitio'}.</p><p><b>2. Datos que tratamos.</b> Nombre, email, teléfono, fecha de nacimiento, sexo, peso, altura, composición corporal, antecedentes médicos, alergias, intolerancias y patologías, estudios médicos que cargues, turnos, planes alimentarios, compras y reseñas con fotos.</p><p><b>3. Finalidad.</b> Brindar la atención nutricional, gestionar turnos y pagos, armar tu plan alimentario y comunicarnos con vos. Las reseñas y fotos solo se publican si lo autorizás y la profesional las aprueba.</p><p><b>4. Quién accede.</b> La profesional; la nutricionista a cargo de tu atención, si elegiste otra; y quien realiza el mantenimiento técnico del sitio, que tiene acceso administrativo. No vendemos tus datos ni los cedemos a terceros con fines comerciales.</p><p><b>5. Proveedores.</b> Los datos se alojan en Google Firebase (Google LLC), cuyos servidores pueden estar fuera de Argentina. Los pagos los procesa Mercado Pago: esta página no recibe ni guarda los datos de tu tarjeta.</p><p><b>6. Menores.</b> Si el paciente es menor de 18 años, el registro y el consentimiento deben darlos su madre, padre o tutor legal.</p><p><b>7. Tus derechos.</b> Podés pedir el acceso, la rectificación o la eliminación de tus datos escribiendo al contacto indicado. El titular de los datos personales tiene la facultad de ejercer el derecho de acceso a los mismos en forma gratuita a intervalos no inferiores a seis meses, salvo que se acredite un interés legítimo al efecto conforme lo establecido en el artículo 14, inciso 3 de la Ley Nº 25.326. La Agencia de Acceso a la Información Pública, en su carácter de Órgano de Control de la Ley Nº 25.326, tiene la atribución de atender las denuncias y reclamos que se interpongan con relación al incumplimiento de las normas sobre protección de datos personales.</p><p><b>8. Conservación y seguridad.</b> Conservamos tus datos mientras mantengas tu cuenta o sean necesarios para tu atención, y aplicamos medidas técnicas de seguridad. Podés pedir la baja de tu cuenta.</p><p><b>9. Cambios.</b> Si modificamos esta política te lo vamos a informar.</p></div>`};
+const verPolitica=()=>modal(`<h3 class="text-xl font-extrabold mb-3">Política de Privacidad</h3>${POLITICA()}`);
+const CONSENT=()=>`<div class="card max-w-2xl mx-auto space-y-4"><h2 class="text-xl font-extrabold">Antes de continuar</h2><p class="text-xs text-gray-600">Para usar la plataforma necesitamos tu consentimiento para tratar tus datos personales y de salud.</p><div class="max-h-64 overflow-y-auto p-4 bg-sand rounded-2xl">${POLITICA()}</div><label class="flex items-start gap-2 text-xs"><input id="c-ok" type="checkbox" class="mt-0.5"> <span>${CONSENT_TXT}</span></label><div class="flex gap-2"><button class="btn" onclick="aceptarConsent()">Aceptar y continuar</button><button class="btn2" onclick="askLogout()">Cerrar sesión</button></div></div>`;
+async function aceptarConsent(){if(!$('c-ok').checked)return toast('Tenés que aceptar para continuar.',1);
+ try{await setDoc(doc(db,'users',S.user.uid),{consent:{v:CONSENT_V,fecha:serverTimestamp()}},{merge:true});S.consent=true;render()}catch(e){toast('Error: '+e.message,1)}}
+
+/* ===== COPIA DE SEGURIDAD (descarga manual, solo administradores) ===== */
+async function descargarCopia(){try{toast('Preparando la copia...');const out={fecha:new Date().toISOString()};
+ for(const c of ['users','fichas_medicas','planes_nutricionales','turnos','ventas','nutris','solicitudes','productos','resenas'])out[c]=(await all(c)).map(d=>{const x={...d};if(x.imgs)x.imgs=x.imgs.length+' imagen(es)';if(x.fotos)x.fotos=x.fotos.length+' foto(s)';return x});
+ for(const c of ['precios','sitio']){const d=await getDoc(doc(db,'config',c));out['config_'+c]=d.exists()?d.data():null}
+ const u=URL.createObjectURL(new Blob([JSON.stringify(out,null,1)],{type:'application/json'})),a=document.createElement('a');a.href=u;a.download='copia-nutricion-pam-'+new Date().toISOString().slice(0,10)+'.json';a.click();toast('Copia descargada.')}catch(e){toast('Error: '+e.message,1)}}
+
+/* ===== PLAN EN PDF (visor, comentario, descarga) ===== */
+async function bytesDe(...ruta){const ps=(await getDocs(collection(db,...ruta))).docs.sort((a,b)=>a.id-b.id).map(d=>d.data().d).join(''),bin=atob(ps),u=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)u[i]=bin.charCodeAt(i);return u}
+const planHTML=(pd,uid)=>{S.planUid=uid;return `${pd.pdfPartes>0?`<div class="flex flex-wrap justify-between items-center gap-2"><span class="text-xs font-bold"><i class="fa-solid fa-file-pdf text-red-500"></i> ${esc(pd.pdfNombre)}</span><button class="btn" onclick="descargarPlan('${uid}')"><i class="fa-solid fa-download"></i> Descargar PDF</button></div><div id="visor" class="max-h-[75vh] overflow-y-auto rounded-2xl bg-sand p-2 text-xs text-gray-500">Cargando tu plan...</div>`:pd.plan?`<div class="p-6 bg-sand rounded-2xl text-sm leading-relaxed">${br(pd.plan)}</div>`:`<div class="p-8 text-center bg-sand rounded-3xl space-y-2"><div class="text-3xl">⏳</div><h3 class="font-extrabold">Esperá que tu nutricionista cargue tu plan</h3><p class="text-xs text-gray-600 max-w-md mx-auto">Tu plan alimentario personalizado se carga luego de tu consulta presencial u online.</p></div>`}${pd.comentario?`<div class="p-4 bg-brand-50 border border-brand-100 rounded-2xl"><h4 class="font-bold text-brand-800 text-xs uppercase mb-1">Comentario de tu nutricionista</h4><p class="text-sm whitespace-pre-line">${esc(pd.comentario)}</p></div>`:''}`};
+async function cargarVisor(uid){const c=$('visor');if(!c||!uid)return;
+ try{const u=await bytesDe('planes_nutricionales',uid,'partes');
+  if(window.pdfjsLib){const pdf=await pdfjsLib.getDocument({data:u.slice()}).promise;c.innerHTML='';
+   for(let n=1;n<=pdf.numPages;n++){const pg=await pdf.getPage(n),w=(c.clientWidth||600)-16,v=pg.getViewport({scale:w/pg.getViewport({scale:1}).width*Math.min(window.devicePixelRatio||1,1.5)}),cv=document.createElement('canvas');cv.width=v.width;cv.height=v.height;cv.style.width='100%';cv.className='mb-2 rounded-lg border border-gray-200 bg-white';c.appendChild(cv);await pg.render({canvasContext:cv.getContext('2d'),viewport:v}).promise}
+  }else c.innerHTML=`<iframe src="${URL.createObjectURL(new Blob([u],{type:'application/pdf'}))}" class="w-full h-[70vh] rounded-xl"></iframe>`;
+ }catch(e){c.innerHTML='<p class="text-xs text-red-600">No se pudo mostrar el PDF. Probá con el botón Descargar.</p>';console.warn(e)}}
+async function descargarPlan(uid){try{const u=await bytesDe('planes_nutricionales',uid,'partes'),pd=(await getDoc(doc(db,'planes_nutricionales',uid))).data()||{},a=document.createElement('a');a.href=URL.createObjectURL(new Blob([u],{type:'application/pdf'}));a.download=pd.pdfNombre||'plan-alimentario.pdf';a.click()}catch(e){toast('No se pudo descargar: '+e.message,1)}}
+async function subirPlan(uid){const f=$('plan-file')?.files[0];if(!f)return toast('Elegí un PDF.',1);
+ if(!/\.pdf$/i.test(f.name)&&f.type!=='application/pdf')return toast('Solo se aceptan archivos PDF.',1);
+ if(f.size>MAX_PDF)return toast('El PDF supera los 3 MB.',1);
+ try{toast('Subiendo el plan...');const d=await b64(f),parts=Math.ceil(d.length/CH);
+  for(const p of (await getDocs(collection(db,'planes_nutricionales',uid,'partes'))).docs)await deleteDoc(p.ref);
+  for(let i=0;i<parts;i++)await setDoc(doc(db,'planes_nutricionales',uid,'partes',String(i)),{d:d.slice(i*CH,(i+1)*CH)});
+  await setDoc(doc(db,'planes_nutricionales',uid),{pdfNombre:f.name.slice(0,80),pdfSize:f.size,pdfPartes:parts,pdfFecha:serverTimestamp(),updatedAt:serverTimestamp()},{merge:true});
+  toast('Plan cargado. El paciente ya puede verlo.');go('paciente')}catch(e){toast('No se pudo subir: '+e.message,1)}}
+async function guardarComentario(uid){try{await setDoc(doc(db,'planes_nutricionales',uid),{comentario:$('plan-com').value.trim(),comentarioFecha:serverTimestamp(),updatedAt:serverTimestamp()},{merge:true});toast('Comentario guardado. El paciente ya lo puede ver.')}catch(e){toast('Error: '+e.message,1)}}
+async function borrarPlanPdf(uid){if(!confirm('¿Quitar el PDF del plan?'))return;
+ try{for(const p of (await getDocs(collection(db,'planes_nutricionales',uid,'partes'))).docs)await deleteDoc(p.ref);await setDoc(doc(db,'planes_nutricionales',uid),{pdfNombre:null,pdfSize:null,pdfPartes:0},{merge:true});go('paciente')}catch(e){toast('Error: '+e.message,1)}}
+
+/* ===== FICHAS: buscador y orden ===== */
+const norm=x=>String(x||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+const ape=n=>{const p=String(n||'').trim().split(/\s+/);return p.length>1?p[p.length-1]:p[0]};
+function listaFichas(){const d=S.fd||{us:[],fi:[]},q=norm($('fb-q')?.value),o=$('fb-o')?.value||'na',dir=o[1]==='z'?-1:1,key=u=>norm(o[0]==='a'?ape(u.displayName):u.displayName);
+ const l=d.us.filter(u=>!q||norm(u.displayName+' '+u.email).includes(q)).sort((a,b)=>key(a).localeCompare(key(b),'es')*dir);
+ return l.length?patList(l,d.fi,1):'<p class="text-xs text-gray-500">No se encontraron pacientes.</p>'}
+const filtrarFichas=()=>{$('f-lista').innerHTML=listaFichas()};
+
+/* ===== FICHA DEL PACIENTE (vista para nutricionistas) ===== */
+const FLAB={nacimiento:'Fecha de nacimiento',sexo:'Sexo',telefono:'WhatsApp',peso:'Peso (kg)',altura:'Altura (cm)',objetivo:'Objetivo',patologias:'Alergias, intolerancias y patologías',grasa:'% Grasa',musculo:'% Músculo',obs:'Observaciones'};
+const edad=n=>{const d=new Date(n+'T12:00:00'),h=new Date();if(isNaN(d))return '?';let a=h.getFullYear()-d.getFullYear();if(h<new Date(h.getFullYear(),d.getMonth(),d.getDate()))a--;return a};
+VIEWS.paciente=async()=>{const id=S.pac,[u,f,p]=await Promise.all(['users','fichas_medicas','planes_nutricionales'].map(c=>getDoc(doc(db,c,id)).catch(()=>null)));
+ if(!u||!u.exists())return `<div class="card text-center text-sm text-gray-500">No se encontró el paciente o no tenés acceso. <button class="btn mt-3" onclick="go('${S.volver||'fichas'}')">Volver</button></div>`;
+ const us=u.data(),fi=(f&&f.data())||{},pd=(p&&p.data())||{},es=await listEst(id),eq=S.admin?await all('equipo'):[],falta=!completa(fi);
+ const nom=us.nutriId&&us.nutriId!=='admin'?((eq.find(e=>e.id===us.nutriId)||{}).nombre||'Otra nutricionista'):'Lic. Pamela Lagardo';
+ const datos=`<div class="grid sm:grid-cols-2 gap-3">${S.admin?`<div class="p-3 bg-sand rounded-2xl sm:col-span-2"><span class="block text-[0.6875rem] font-bold text-gray-500">Nutricionista a cargo</span><span class="text-sm font-semibold">${esc(nom)}</span></div>`:''}${FIELDS.map(x=>{const k=x[0],v=fi[k],vac=!String(v??'').trim();return `<div class="p-3 bg-sand rounded-2xl ${['patologias','obs','objetivo'].includes(k)?'sm:col-span-2':''}"><span class="block text-[0.6875rem] font-bold text-gray-500">${FLAB[k]}</span>${vac?(x[3]?'<span class="text-xs text-red-600 font-bold">⚠ Por favor rellene información</span>':'<span class="text-xs text-gray-400">--</span>'):`<span class="text-sm font-semibold whitespace-pre-line">${esc(v)}${k==='nacimiento'?' ('+edad(v)+' años)':''}</span>`}</div>`}).join('')}</div>`;
+ const form=`<form onsubmit="guardarFicha(event,'${id}')">${FIELDS.map(x=>fld(x,fi[x[0]])).join('')}${S.admin?`<label class="lbl">Nutricionista a cargo</label><select id="f-nutriId" class="inp"><option value="admin">Lic. Pamela Lagardo</option>${eq.map(e=>`<option value="${e.id}"${us.nutriId===e.id?' selected':''}>${esc(e.nombre)}</option>`).join('')}</select>`:''}<div class="flex gap-2 mt-5"><button class="btn">Guardar cambios</button><button type="button" class="btn2" onclick="S.pacEdit=false;go('paciente')">Cancelar</button></div></form>`;
+ return `<div class="space-y-6 max-w-4xl"><div class="card flex justify-between items-start gap-3"><div><button class="text-xs font-bold text-brand-700 hover:underline mb-2" onclick="go('${S.volver||'fichas'}')">← Volver</button><h2 class="text-2xl font-extrabold">${esc(us.displayName||'Paciente')}</h2><span class="text-xs text-gray-500 mr-2">${esc(us.email)}</span>${badgeEstado(us.estado)}</div><button onclick="S.pacEdit=!S.pacEdit;go('paciente')" title="${S.pacEdit?'Cancelar edición':falta?'Faltan datos: editar':'Editar datos del paciente'}" class="w-11 h-11 shrink-0 rounded-full border ${S.pacEdit?'bg-brand-700 text-white border-brand-700':'bg-white text-gray-600 border-gray-300'} ${falta&&!S.pacEdit?'ring-2 ring-amber-400 animate-pulse':''}"><i class="fa-solid fa-gear"></i></button></div>
+<div class="card space-y-3"><h3 class="text-lg font-extrabold">${S.pacEdit?'Editar datos':'Datos del paciente'}</h3>${S.pacEdit?form:datos}</div>
+<div class="card space-y-3"><h3 class="text-lg font-extrabold">Estudios médicos (${es.length}/5)</h3><div class="space-y-2">${estHTML(es,S.admin)}</div></div>
+<div class="card space-y-3"><h3 class="text-lg font-extrabold">Plan alimentario</h3>${pd.pdfPartes>0?`<div class="flex flex-wrap justify-between items-center gap-2"><span class="text-xs font-bold"><i class="fa-solid fa-file-pdf text-red-500"></i> ${esc(pd.pdfNombre)}</span><span class="flex gap-2"><button class="btn" onclick="descargarPlan('${id}')"><i class="fa-solid fa-download"></i> Descargar</button><button class="btn2 text-red-600" onclick="borrarPlanPdf('${id}')">Quitar PDF</button></span></div><div id="visor" class="max-h-[75vh] overflow-y-auto rounded-2xl bg-sand p-2 text-xs text-gray-500">Cargando el plan...</div>`:'<p class="text-xs text-gray-500">Todavía no cargaste un PDF para este paciente.</p>'}
+<div><label class="lbl">${pd.pdfPartes>0?'Reemplazar PDF del plan':'Cargar PDF del plan'} (hasta 3 MB)</label><input id="plan-file" type="file" accept="application/pdf" class="text-xs"><button class="btn mt-2" onclick="subirPlan('${id}')"><i class="fa-solid fa-upload"></i> Subir plan</button></div>
+<div><label class="lbl">Comentario para el paciente</label><textarea id="plan-com" maxlength="2000" class="inp h-24" placeholder="Indicaciones, recomendaciones, próximos pasos...">${esc(pd.comentario)}</textarea><button class="btn mt-2" onclick="guardarComentario('${id}')">Guardar comentario</button></div></div></div>`};
+
+/* ===== TIENDA: flechas y pantalla completa ===== */
+function moverCard(id,d){const im=S.prods[id].imgs,n=im.length;S.ci=S.ci||{};S.ci[id]=((S.ci[id]||0)+d+n)%n;$('cv-'+id).src=im[S.ci[id]]}
+function fsImg(id,i){const p=S.prods[id];if(!p||!(p.imgs||[]).length)return;S.fs={id,i};
+ if(!$('fs-ov')){const o=document.createElement('div');o.id='fs-ov';o.className='fixed inset-0 z-[70] bg-black flex items-center justify-center';document.body.appendChild(o);if(o.requestFullscreen)o.requestFullscreen().catch(()=>{})}
+ pintarFs()}
+function pintarFs(){const {id,i}=S.fs,im=S.prods[id].imgs;$('fs-ov').innerHTML=`<img src="${esc(im[i])}" class="max-w-full max-h-full object-contain">${im.length>1?`<button onclick="fsNav(-1)" class="absolute left-3 top-1/2 -translate-y-1/2 w-12 h-12 rounded-full bg-white/20 text-white text-2xl" title="Anterior">‹</button><button onclick="fsNav(1)" class="absolute right-3 top-1/2 -translate-y-1/2 w-12 h-12 rounded-full bg-white/20 text-white text-2xl" title="Siguiente">›</button>`:''}<button onclick="cerrarFs()" class="absolute top-4 right-4 w-11 h-11 rounded-full bg-white/20 text-white text-xl" title="Cerrar">✕</button><span class="absolute bottom-4 left-1/2 -translate-x-1/2 text-white text-xs">${i+1} / ${im.length}</span>`}
+function fsNav(d){const n=S.prods[S.fs.id].imgs.length;S.fs.i=(S.fs.i+d+n)%n;pintarFs()}
+function cerrarFs(){const f=S.fs;S.fs=null;if(document.fullscreenElement)document.exitFullscreen().catch(()=>{});$('fs-ov')?.remove();if(f&&$('modal').innerHTML)verProd(f.id,f.i)}
+document.addEventListener('keydown',e=>{if(!S.fs)return;if(e.key==='ArrowLeft')fsNav(-1);else if(e.key==='ArrowRight')fsNav(1);else if(e.key==='Escape')cerrarFs()});
+document.addEventListener('fullscreenchange',()=>{if(!document.fullscreenElement&&S.fs)cerrarFs()});
+
 /* ===== TEMPORIZADOR Y ARRANQUE ===== */
 setInterval(()=>{const t=$('oferta-timer');if(!t)return;
  if(!ofertaOn()){go('turnos');return}
  const s=Math.floor((ar(S.cfg.oferta.hasta)-Date.now())/1000),p=n=>String(n).padStart(2,'0');
  t.textContent=`${Math.floor(s/86400)}d ${p(Math.floor(s%86400/3600))}:${p(Math.floor(s%3600/60))}:${p(s%60)}`},1000);
 consultorio();setInterval(consultorio,60000);
-Object.assign(window,{S,auth,onUser,regN,resetM,guardarPrecios,askLogout,cambiarTam,cambiarTema,verPw,irTurno,subirEstudios,verEstudio,borrarEstudio,addImgs,quitarImg,portadaImg,verProd,verFoto,addFotosRes,quitarFotoRes,enviarResena,setResena,setFin,guardarSitio,aprobarNutri,rechazarNutri,revocarNutri,go,modalAuth,closeModal,loginG,loginF,loginM,regM,logout,selPlan,selMod,selHora,selFecha,pagar,irMP,comprar,modalProd,guardarProd,borrarProd,seedProd,abrirFicha,guardarFicha,setAsist});
-aplicarPref();loadSitio();
+Object.assign(window,{S,auth,onUser,filtrarFichas,moverCard,fsImg,fsNav,cerrarFs,subirPlan,guardarComentario,borrarPlanPdf,descargarPlan,verPolitica,aceptarConsent,descargarCopia,regN,resetM,guardarPrecios,askLogout,cambiarTam,cambiarTema,verPw,irTurno,subirEstudios,verEstudio,borrarEstudio,addImgs,quitarImg,portadaImg,verProd,verFoto,addFotosRes,quitarFotoRes,enviarResena,setResena,setFin,guardarSitio,aprobarNutri,rechazarNutri,revocarNutri,go,modalAuth,closeModal,loginG,loginF,loginM,regM,logout,selPlan,selMod,selHora,selFecha,pagar,irMP,comprar,modalProd,guardarProd,borrarProd,seedProd,abrirFicha,guardarFicha,setAsist});
+aplicarPref();loadSitio();if(window.pdfjsLib)pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 render();
 </script>
 </body>
